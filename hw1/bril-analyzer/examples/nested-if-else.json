@@ -1,0 +1,348 @@
+{
+  "functions": [
+    {
+      "name": "main",
+      "instrs": [
+        {
+          "op": "const",
+          "value": 3,
+          "dest": "v0",
+          "type": "int"
+        },
+        {
+          "op": "id",
+          "dest": "n",
+          "type": "int",
+          "args": [
+            "v0"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v1",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "call",
+          "args": [
+            "v1"
+          ],
+          "funcs": [
+            "nested_if_else"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 0,
+          "dest": "v2",
+          "type": "int"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "nested_if_else",
+      "instrs": [
+        {
+          "op": "const",
+          "value": 3,
+          "dest": "v0",
+          "type": "int"
+        },
+        {
+          "op": "id",
+          "dest": "a",
+          "type": "int",
+          "args": [
+            "v0"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v2",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 10,
+          "dest": "v3",
+          "type": "int"
+        },
+        {
+          "op": "lt",
+          "dest": "v4",
+          "type": "bool",
+          "args": [
+            "v2",
+            "v3"
+          ]
+        },
+        {
+          "op": "br",
+          "args": [
+            "v4"
+          ],
+          "labels": [
+            "then.1",
+            "else.1"
+          ]
+        },
+        {
+          "label": "then.1"
+        },
+        {
+          "op": "id",
+          "dest": "v6",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 5,
+          "dest": "v7",
+          "type": "int"
+        },
+        {
+          "op": "gt",
+          "dest": "v8",
+          "type": "bool",
+          "args": [
+            "v6",
+            "v7"
+          ]
+        },
+        {
+          "op": "br",
+          "args": [
+            "v8"
+          ],
+          "labels": [
+            "then.5",
+            "else.5"
+          ]
+        },
+        {
+          "label": "then.5"
+        },
+        {
+          "op": "id",
+          "dest": "v9",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 1,
+          "dest": "v10",
+          "type": "int"
+        },
+        {
+          "op": "add",
+          "dest": "v11",
+          "type": "int",
+          "args": [
+            "v9",
+            "v10"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "n",
+          "type": "int",
+          "args": [
+            "v11"
+          ]
+        },
+        {
+          "op": "jmp",
+          "args": [],
+          "labels": [
+            "endif.5"
+          ]
+        },
+        {
+          "label": "else.5"
+        },
+        {
+          "op": "id",
+          "dest": "v12",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 10,
+          "dest": "v13",
+          "type": "int"
+        },
+        {
+          "op": "mul",
+          "dest": "v14",
+          "type": "int",
+          "args": [
+            "v12",
+            "v13"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "n",
+          "type": "int",
+          "args": [
+            "v14"
+          ]
+        },
+        {
+          "label": "endif.5"
+        },
+        {
+          "op": "jmp",
+          "args": [],
+          "labels": [
+            "endif.1"
+          ]
+        },
+        {
+          "label": "else.1"
+        },
+        {
+          "op": "id",
+          "dest": "v16",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 20,
+          "dest": "v17",
+          "type": "int"
+        },
+        {
+          "op": "gt",
+          "dest": "v18",
+          "type": "bool",
+          "args": [
+            "v16",
+            "v17"
+          ]
+        },
+        {
+          "op": "br",
+          "args": [
+            "v18"
+          ],
+          "labels": [
+            "then.15",
+            "else.15"
+          ]
+        },
+        {
+          "label": "then.15"
+        },
+        {
+          "op": "id",
+          "dest": "v19",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 100,
+          "dest": "v20",
+          "type": "int"
+        },
+        {
+          "op": "mul",
+          "dest": "v21",
+          "type": "int",
+          "args": [
+            "v19",
+            "v20"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "n",
+          "type": "int",
+          "args": [
+            "v21"
+          ]
+        },
+        {
+          "op": "jmp",
+          "args": [],
+          "labels": [
+            "endif.15"
+          ]
+        },
+        {
+          "label": "else.15"
+        },
+        {
+          "op": "id",
+          "dest": "v22",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "n",
+          "type": "int",
+          "args": [
+            "v22"
+          ]
+        },
+        {
+          "label": "endif.15"
+        },
+        {
+          "label": "endif.1"
+        },
+        {
+          "op": "id",
+          "dest": "v23",
+          "type": "int",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "print",
+          "args": [
+            "v23"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 0,
+          "dest": "v24",
+          "type": "int"
+        }
+      ],
+      "args": [
+        {
+          "name": "n",
+          "type": "int"
+        }
+      ]
+    }
+  ]
+}
