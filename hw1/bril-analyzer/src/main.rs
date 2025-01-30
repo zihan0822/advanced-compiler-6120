@@ -3,11 +3,12 @@ pub mod cfg;
 
 use clap::Parser;
 use std::collections::HashMap;
+use std::io::{BufReader, Read};
 
 #[derive(Parser)]
 struct Args {
     #[arg(short)]
-    f: String,
+    f: Option<String>,
     #[arg(long, action)]
     cfg: bool,
     #[arg(long, action)]
@@ -16,7 +17,14 @@ struct Args {
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let bril_prog: bril::Prog = serde_json::from_str(&std::fs::read_to_string(&args.f)?).unwrap();
+    let mut reader: Box<dyn Read> = if let Some(ref f) = args.f {
+        Box::new(BufReader::new(std::fs::File::open(f)?))
+    } else {
+        Box::new(BufReader::new(std::io::stdin()))
+    };
+    let mut buf = String::new();
+    assert!(reader.read_to_string(&mut buf)? > 0);
+    let bril_prog: bril::Prog = serde_json::from_str(&buf).unwrap();
     if args.op {
         let mut op_stats = count_ops(&bril_prog).into_iter().collect::<Vec<_>>();
         op_stats.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
