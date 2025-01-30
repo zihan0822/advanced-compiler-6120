@@ -1,0 +1,47 @@
+@main {
+  v0: float = const 10;
+  pieces: float = id v0;
+  v1: float = const 1;
+  v2: float = const 2;
+  v3: float = const 3;
+  v4: float = id pieces;
+  res: float = call @hanoi_solver v1 v2 v3 v4;
+  res: float = id res;
+  v5: float = id res;
+  print v5;
+  v6: int = const 0;
+}
+@hanoi_solver(src: float, dst: float, helper: float, n: float): float {
+  v1: float = id n;
+  v2: float = const 0;
+  v3: bool = feq v1 v2;
+  br v3 .then.0 .else.0;
+.then.0:
+  v4: float = const 0;
+  ret v4;
+.else.0:
+  v5: float = id src;
+  v6: float = id helper;
+  v7: float = id dst;
+  v8: float = id n;
+  v9: float = const 1;
+  v10: float = fsub v8 v9;
+  step1: float = call @hanoi_solver v5 v6 v7 v10;
+  step1: float = id step1;
+  v11: float = const 1;
+  step2: float = id v11;
+  v12: float = id helper;
+  v13: float = id dst;
+  v14: float = id src;
+  v15: float = id n;
+  v16: float = const 1;
+  v17: float = fsub v15 v16;
+  step3: float = call @hanoi_solver v12 v13 v14 v17;
+  step3: float = id step3;
+  v18: float = id step1;
+  v19: float = id step2;
+  v20: float = fadd v18 v19;
+  v21: float = id step3;
+  v22: float = fadd v20 v21;
+  ret v22;
+}

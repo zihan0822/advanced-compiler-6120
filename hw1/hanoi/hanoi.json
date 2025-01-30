@@ -1,0 +1,367 @@
+{
+  "functions": [
+    {
+      "name": "main",
+      "instrs": [
+        {
+          "op": "const",
+          "value": 10,
+          "dest": "v0",
+          "type": "float"
+        },
+        {
+          "op": "id",
+          "dest": "pieces",
+          "type": "float",
+          "args": [
+            "v0"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 1,
+          "dest": "v1",
+          "type": "float"
+        },
+        {
+          "op": "const",
+          "value": 2,
+          "dest": "v2",
+          "type": "float"
+        },
+        {
+          "op": "const",
+          "value": 3,
+          "dest": "v3",
+          "type": "float"
+        },
+        {
+          "op": "id",
+          "dest": "v4",
+          "type": "float",
+          "args": [
+            "pieces"
+          ]
+        },
+        {
+          "op": "call",
+          "dest": "res",
+          "type": "float",
+          "args": [
+            "v1",
+            "v2",
+            "v3",
+            "v4"
+          ],
+          "funcs": [
+            "hanoi_solver"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "res",
+          "type": "float",
+          "args": [
+            "res"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v5",
+          "type": "float",
+          "args": [
+            "res"
+          ]
+        },
+        {
+          "op": "print",
+          "args": [
+            "v5"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 0,
+          "dest": "v6",
+          "type": "int"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "hanoi_solver",
+      "instrs": [
+        {
+          "op": "id",
+          "dest": "v1",
+          "type": "float",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 0,
+          "dest": "v2",
+          "type": "float"
+        },
+        {
+          "op": "feq",
+          "dest": "v3",
+          "type": "bool",
+          "args": [
+            "v1",
+            "v2"
+          ]
+        },
+        {
+          "op": "br",
+          "args": [
+            "v3"
+          ],
+          "labels": [
+            "then.0",
+            "else.0"
+          ]
+        },
+        {
+          "label": "then.0"
+        },
+        {
+          "op": "const",
+          "value": 0,
+          "dest": "v4",
+          "type": "float"
+        },
+        {
+          "op": "ret",
+          "args": [
+            "v4"
+          ]
+        },
+        {
+          "label": "else.0"
+        },
+        {
+          "op": "id",
+          "dest": "v5",
+          "type": "float",
+          "args": [
+            "src"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v6",
+          "type": "float",
+          "args": [
+            "helper"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v7",
+          "type": "float",
+          "args": [
+            "dst"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v8",
+          "type": "float",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 1,
+          "dest": "v9",
+          "type": "float"
+        },
+        {
+          "op": "fsub",
+          "dest": "v10",
+          "type": "float",
+          "args": [
+            "v8",
+            "v9"
+          ]
+        },
+        {
+          "op": "call",
+          "dest": "step1",
+          "type": "float",
+          "args": [
+            "v5",
+            "v6",
+            "v7",
+            "v10"
+          ],
+          "funcs": [
+            "hanoi_solver"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "step1",
+          "type": "float",
+          "args": [
+            "step1"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 1,
+          "dest": "v11",
+          "type": "float"
+        },
+        {
+          "op": "id",
+          "dest": "step2",
+          "type": "float",
+          "args": [
+            "v11"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v12",
+          "type": "float",
+          "args": [
+            "helper"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v13",
+          "type": "float",
+          "args": [
+            "dst"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v14",
+          "type": "float",
+          "args": [
+            "src"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v15",
+          "type": "float",
+          "args": [
+            "n"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 1,
+          "dest": "v16",
+          "type": "float"
+        },
+        {
+          "op": "fsub",
+          "dest": "v17",
+          "type": "float",
+          "args": [
+            "v15",
+            "v16"
+          ]
+        },
+        {
+          "op": "call",
+          "dest": "step3",
+          "type": "float",
+          "args": [
+            "v12",
+            "v13",
+            "v14",
+            "v17"
+          ],
+          "funcs": [
+            "hanoi_solver"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "step3",
+          "type": "float",
+          "args": [
+            "step3"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v18",
+          "type": "float",
+          "args": [
+            "step1"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v19",
+          "type": "float",
+          "args": [
+            "step2"
+          ]
+        },
+        {
+          "op": "fadd",
+          "dest": "v20",
+          "type": "float",
+          "args": [
+            "v18",
+            "v19"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v21",
+          "type": "float",
+          "args": [
+            "step3"
+          ]
+        },
+        {
+          "op": "fadd",
+          "dest": "v22",
+          "type": "float",
+          "args": [
+            "v20",
+            "v21"
+          ]
+        },
+        {
+          "op": "ret",
+          "args": [
+            "v22"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "src",
+          "type": "float"
+        },
+        {
+          "name": "dst",
+          "type": "float"
+        },
+        {
+          "name": "helper",
+          "type": "float"
+        },
+        {
+          "name": "n",
+          "type": "float"
+        }
+      ],
+      "type": "float"
+    }
+  ]
+}

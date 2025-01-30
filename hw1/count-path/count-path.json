@@ -1,0 +1,401 @@
+{
+  "functions": [
+    {
+      "name": "main",
+      "instrs": [
+        {
+          "op": "const",
+          "value": 5,
+          "dest": "v32",
+          "type": "float"
+        },
+        {
+          "op": "const",
+          "value": 5,
+          "dest": "v33",
+          "type": "float"
+        },
+        {
+          "op": "call",
+          "dest": "ans",
+          "type": "float",
+          "args": [
+            "v32",
+            "v33"
+          ],
+          "funcs": [
+            "count_path"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "ans",
+          "type": "float",
+          "args": [
+            "ans"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v34",
+          "type": "float",
+          "args": [
+            "ans"
+          ]
+        },
+        {
+          "op": "print",
+          "args": [
+            "v34"
+          ]
+        },
+        {
+          "op": "const",
+          "value": 0,
+          "dest": "v35",
+          "type": "int"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "count_path",
+      "instrs": [
+        {
+          "op": "const",
+          "value": 0,
+          "dest": "v0",
+          "type": "float"
+        },
+        {
+          "op": "id",
+          "dest": "zero",
+          "type": "float",
+          "args": [
+            "v0"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v1",
+          "type": "float",
+          "args": [
+            "x"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v2",
+          "type": "float",
+          "args": [
+            "zero"
+          ]
+        },
+        {
+          "op": "feq",
+          "dest": "v3",
+          "type": "bool",
+          "args": [
+            "v1",
+            "v2"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "x_eq_zero",
+          "type": "float",
+          "args": [
+            "v3"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v4",
+          "type": "float",
+          "args": [
+            "y"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v5",
+          "type": "float",
+          "args": [
+            "zero"
+          ]
+        },
+        {
+          "op": "feq",
+          "dest": "v6",
+          "type": "bool",
+          "args": [
+            "v4",
+            "v5"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "y_eq_zero",
+          "type": "float",
+          "args": [
+            "v6"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v8",
+          "type": "float",
+          "args": [
+            "x_eq_zero"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v9",
+          "type": "float",
+          "args": [
+            "y_eq_zero"
+          ]
+        },
+        {
+          "op": "fadd",
+          "dest": "v10",
+          "type": "float",
+          "args": [
+            "v8",
+            "v9"
+          ]
+        },
+        {
+          "op": "br",
+          "args": [
+            "v10"
+          ],
+          "labels": [
+            "then.7",
+            "else.7"
+          ]
+        },
+        {
+          "label": "then.7"
+        },
+        {
+          "op": "const",
+          "value": 1,
+          "dest": "v11",
+          "type": "float"
+        },
+        {
+          "op": "ret",
+          "args": [
+            "v11"
+          ]
+        },
+        {
+          "label": "else.7"
+        },
+        {
+          "op": "const",
+          "value": 1,
+          "dest": "v12",
+          "type": "float"
+        },
+        {
+          "op": "id",
+          "dest": "one",
+          "type": "float",
+          "args": [
+            "v12"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v13",
+          "type": "float",
+          "args": [
+            "x"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v14",
+          "type": "float",
+          "args": [
+            "one"
+          ]
+        },
+        {
+          "op": "fsub",
+          "dest": "v15",
+          "type": "float",
+          "args": [
+            "v13",
+            "v14"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v16",
+          "type": "float",
+          "args": [
+            "y"
+          ]
+        },
+        {
+          "op": "call",
+          "dest": "v17",
+          "type": "float",
+          "args": [
+            "v15",
+            "v16"
+          ],
+          "funcs": [
+            "count_path"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v18",
+          "type": "float",
+          "args": [
+            "x"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v19",
+          "type": "float",
+          "args": [
+            "y"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v20",
+          "type": "float",
+          "args": [
+            "one"
+          ]
+        },
+        {
+          "op": "fsub",
+          "dest": "v21",
+          "type": "float",
+          "args": [
+            "v19",
+            "v20"
+          ]
+        },
+        {
+          "op": "call",
+          "dest": "v22",
+          "type": "float",
+          "args": [
+            "v18",
+            "v21"
+          ],
+          "funcs": [
+            "count_path"
+          ]
+        },
+        {
+          "op": "fadd",
+          "dest": "v23",
+          "type": "float",
+          "args": [
+            "v17",
+            "v22"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v24",
+          "type": "float",
+          "args": [
+            "x"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v25",
+          "type": "float",
+          "args": [
+            "one"
+          ]
+        },
+        {
+          "op": "fsub",
+          "dest": "v26",
+          "type": "float",
+          "args": [
+            "v24",
+            "v25"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v27",
+          "type": "float",
+          "args": [
+            "y"
+          ]
+        },
+        {
+          "op": "id",
+          "dest": "v28",
+          "type": "float",
+          "args": [
+            "one"
+          ]
+        },
+        {
+          "op": "fsub",
+          "dest": "v29",
+          "type": "float",
+          "args": [
+            "v27",
+            "v28"
+          ]
+        },
+        {
+          "op": "call",
+          "dest": "v30",
+          "type": "float",
+          "args": [
+            "v26",
+            "v29"
+          ],
+          "funcs": [
+            "count_path"
+          ]
+        },
+        {
+          "op": "fadd",
+          "dest": "v31",
+          "type": "float",
+          "args": [
+            "v23",
+            "v30"
+          ]
+        },
+        {
+          "op": "ret",
+          "args": [
+            "v31"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "x",
+          "type": "float"
+        },
+        {
+          "name": "y",
+          "type": "float"
+        }
+      ],
+      "type": "float"
+    }
+  ]
+}
