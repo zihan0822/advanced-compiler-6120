@@ -42,10 +42,8 @@ impl Cfg {
         for (i, node) in nodes.iter().enumerate() {
             let mut node_lock = node.lock().unwrap();
 
-            dbg!(node_lock.blk.instrs.len());
-            debug_assert!(!node_lock.blk.instrs.is_empty());
-            let successors = match node_lock.blk.instrs.last().unwrap() {
-                LabelOrInst::Inst { op, labels, .. } => {
+            let successors = match node_lock.blk.instrs.last() {
+                Some(LabelOrInst::Inst { op, labels, .. }) => {
                     if is_terminator_op(op) {
                         Some(
                             labels
@@ -57,6 +55,15 @@ impl Cfg {
                         )
                     } else if i < nodes.len() - 1 {
                         // if non-terminator, we try to execute the following block
+                        Some(vec![nodes[i + 1].clone()])
+                    } else {
+                        None
+                    }
+                }
+                // handle the case where a basic label may only contain one label no instr
+                None => {
+                    debug_assert!(node_lock.label.is_some());
+                    if i < nodes.len() - 1 {
                         Some(vec![nodes[i + 1].clone()])
                     } else {
                         None
@@ -197,7 +204,8 @@ impl BasicBlock {
                 _ => cur_blk.instrs.push(instr.clone()),
             }
         }
-        if !cur_blk.instrs.is_empty() {
+
+        if !cur_blk.instrs.is_empty() || cur_blk.label.is_some() {
             blks.push(cur_blk);
         }
         blks
