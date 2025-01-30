@@ -132,30 +132,7 @@ impl Cfg {
             .0
             .iter()
             .enumerate()
-            .map(|(i, node)| {
-                let node_lock = &node.lock().unwrap();
-                // use first two inst/label as caption of a given node
-                let mut captions = vec![];
-                let mut num_instr = 2;
-                if let Some(ref label) = node_lock.label {
-                    captions.push(format!(".{}", label));
-                    num_instr = 1;
-                }
-                let instrs = node_lock
-                    .blk
-                    .instrs
-                    .iter()
-                    .take(num_instr)
-                    .filter_map(|inst| {
-                        if let LabelOrInst::Inst { op, .. } = inst {
-                            Some(op.to_string())
-                        } else {
-                            None
-                        }
-                    });
-                captions.extend(instrs);
-                format! {r#"{} [label = "{}"]"#, i, captions.join("; ")}
-            })
+            .map(|(i, node)| format!(r#"{} [label = {}]"#, i, node.lock().unwrap().caption()))
             .collect();
 
         let edge_desc: Vec<String> = edges
@@ -171,6 +148,53 @@ impl Cfg {
             }}",
             nodes_desc.join("\n"),
             edge_desc.join("\n")
+        )
+    }
+}
+
+impl CfgNode {
+    /// little html codes for node content display
+    fn caption(&self) -> String {
+        let mut tags = vec![];
+        if let Some(ref label) = self.label {
+            tags.push(format!(
+                r#"
+                <tr><td align="left" valign="top"><b>.{}</b></td></tr>
+            "#,
+                label
+            ));
+        }
+        // display first 2 instrs
+        let instrs: Vec<_> = self
+            .blk
+            .instrs
+            .iter()
+            .take(2)
+            .map(|inst| {
+                if let LabelOrInst::Inst { op, .. } = inst {
+                    op.clone()
+                } else {
+                    unreachable!()
+                }
+            })
+            .collect();
+
+        if !instrs.is_empty() {
+            tags.push(format!(
+                r#"
+                    <tr><td align="CENTER" valign="MIDDLE">{}</td></tr>
+                "#,
+                instrs.join("<br/>")
+            ))
+        }
+
+        format!(
+            r#"<
+        <table BORDER="0" CELLBORDER="0" CELLSPACING="0">
+            {}
+        </table>
+    >"#,
+            tags.join("")
         )
     }
 }
