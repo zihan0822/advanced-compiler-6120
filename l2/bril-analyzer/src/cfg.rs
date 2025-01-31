@@ -1,14 +1,60 @@
-use crate::bril::{LabelOrInst, Prog};
+use crate::bril::{Function, LabelOrInst, Prog};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 type NodeRef = Arc<Mutex<CfgNode>>;
 
+/// maintains cfg for each function in input bril prog
+pub struct ProgCfgs(pub Vec<(String, Cfg)>);
+
+impl ProgCfgs {
+    pub fn from_bril_prog(prog: &Prog) -> Self {
+        let cfgs = prog
+            .functions
+            .iter()
+            .map(|f| (f.name.clone(), Cfg::from_bril_func(f)))
+            .collect();
+        Self(cfgs)
+    }
+
+    pub fn port_graph_as_dot(&self) -> String {
+        let subgraphs = self
+            .0
+            .iter()
+            .enumerate()
+            .map(|(i, (scope, cfg))| {
+                dbg!(scope);
+                format!(
+                    r#"
+            subgraph cluster_{} {{
+                label = "@{}";
+                labelloc = "t";
+                labeljust = "l";
+                style = "solid";
+                fontcolor = "brown";
+                {} 
+            }} 
+        "#,
+                    i,
+                    scope,
+                    cfg.nodes_and_edges_in_dot(|i| format!("{}_{}", scope, i))
+                )
+            })
+            .collect::<Vec<_>>();
+        format!(
+            "digraph G {{
+            {} 
+        }}",
+            subgraphs.join("\n")
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct Cfg(Vec<NodeRef>);
 
 #[derive(Debug)]
-pub struct CfgNode {
+struct CfgNode {
     label: Option<String>,
     blk: BasicBlock,
     successors: Vec<NodeRef>,
@@ -16,8 +62,8 @@ pub struct CfgNode {
 
 impl Cfg {
     #[inline]
-    pub fn from_bril_prog(prog: &Prog) -> Self {
-        Self::from_basic_blks(&BasicBlock::walk_prog(prog))
+    pub fn from_bril_func(func: &Function) -> Self {
+        Self::from_basic_blks(&BasicBlock::build_from_func(func))
     }
 
     pub fn from_basic_blks(blks: &[BasicBlock]) -> Self {
@@ -81,8 +127,17 @@ impl Cfg {
         Self(nodes)
     }
 
-    /// output cfg in dot format
     pub fn port_graph_as_dot(&self) -> String {
+        format!(
+            "digraph CFG {{
+                {} 
+        }}",
+            self.nodes_and_edges_in_dot(|i| i.to_string())
+        )
+    }
+
+    /// output cfg in dot format
+    fn nodes_and_edges_in_dot<F: Fn(usize) -> String>(&self, scoper: F) -> String {
         type NodePtr = *const Mutex<CfgNode>;
 
         struct Visitor {
@@ -132,20 +187,20 @@ impl Cfg {
             .0
             .iter()
             .enumerate()
-            .map(|(i, node)| format!(r#"{} [label = {}]"#, i, node.lock().unwrap().caption()))
+            .map(|(i, node)| format!(r#"{} [label = {}]"#, scoper(i), node.lock().unwrap().caption()))
             .collect();
 
         let edge_desc: Vec<String> = edges
             .iter()
-            .map(|(u, v)| format!("{} -> {}", u, v))
+            .map(|(u, v)| format!("{} -> {}", scoper(*u), scoper(*v)))
             .collect();
 
         format!(
-            "digraph CFG {{ \n\
+            "
                 node [shape = box] \n\
                 {} \n\
                 {} \n\
-            }}",
+            ",
             nodes_desc.join("\n"),
             edge_desc.join("\n")
         )
@@ -206,10 +261,10 @@ pub struct BasicBlock {
 }
 
 impl BasicBlock {
-    pub fn walk_prog(prog: &Prog) -> Vec<BasicBlock> {
+    pub fn build_from_func(func: &Function) -> Vec<BasicBlock> {
         let mut blks = vec![];
         let mut cur_blk = Self::new();
-        for instr in prog.functions.iter().flat_map(|f| f.instrs.iter()) {
+        for instr in &func.instrs {
             match instr {
                 LabelOrInst::Label { label } => {
                     if cur_blk.label.is_none() && cur_blk.instrs.is_empty() {

@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
         }
     }
     if args.cfg {
-        let dot = cfg::Cfg::from_bril_prog(&bril_prog).port_graph_as_dot();
+        let dot = cfg::ProgCfgs::from_bril_prog(&bril_prog).port_graph_as_dot();
         println!("{}", dot);
     }
     Ok(())
