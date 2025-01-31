@@ -61,4 +61,13 @@ function nested_if_else(n: bigint) {
 ![nested-if-else-cfg](examples/nested-if-else-cfg.png)
 
 [benchmakrs/core/prime-between](https://github.com/sampsyo/bril/blob/main/benchmarks/core/primes-between.bril)
-![benchmarks/core/prime-between-cfg](examples/primes-between-cfg.png)
+
+
+
+<img src="examples/primes-between-cfg.png" alt="benchmarks/core/prime-between-cfg" style="zoom:50%;" />
+
+[benchmarks/core/armstrong](https://github.com/sampsyo/bril/blob/main/benchmarks/core/armstrong.bril)
+
+
+
+![benchmarks/core/armstrong](examples/armstrong.png)
