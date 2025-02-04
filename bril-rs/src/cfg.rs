@@ -187,7 +187,13 @@ impl Cfg {
             .0
             .iter()
             .enumerate()
-            .map(|(i, node)| format!(r#"{} [label = {}]"#, scoper(i), node.lock().unwrap().caption()))
+            .map(|(i, node)| {
+                format!(
+                    r#"{} [label = {}]"#,
+                    scoper(i),
+                    node.lock().unwrap().caption()
+                )
+            })
             .collect();
 
         let edge_desc: Vec<String> = edges
@@ -256,8 +262,8 @@ impl CfgNode {
 
 #[derive(Debug, Clone)]
 pub struct BasicBlock {
-    label: Option<String>,
-    instrs: Vec<LabelOrInst>,
+    pub label: Option<String>,
+    pub instrs: Vec<LabelOrInst>,
 }
 
 impl BasicBlock {

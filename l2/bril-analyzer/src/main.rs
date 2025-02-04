@@ -1,6 +1,4 @@
-pub mod bril;
-pub mod cfg;
-
+use bril_rs::{bril, cfg};
 use clap::Parser;
 use std::collections::HashMap;
 use std::io::{BufReader, Read};
@@ -24,7 +22,7 @@ fn main() -> std::io::Result<()> {
     };
     let mut buf = String::new();
     assert!(reader.read_to_string(&mut buf)? > 0);
-    let bril_prog: bril::Prog = serde_json::from_str(&buf).unwrap();
+    let bril_prog = bril::Prog::from_json(&buf).unwrap();
     if args.op {
         let mut op_stats = count_ops(&bril_prog).into_iter().collect::<Vec<_>>();
         op_stats.sort_by_key(|&(_, count)| std::cmp::Reverse(count));

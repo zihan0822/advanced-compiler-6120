@@ -6,6 +6,13 @@ pub struct Prog {
     pub functions: Vec<Function>,
 }
 
+impl Prog {
+    #[inline]
+    pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        serde_json::from_str(json)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Function {
     pub name: String,
