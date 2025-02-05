@@ -1,8 +1,9 @@
 use crate::bril::{Arg, Function, LabelOrInst, Prog};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 type NodeRef = Arc<Mutex<CfgNode>>;
+type WeakNodeRef = Weak<Mutex<CfgNode>>;
 
 /// maintains cfg for each function in input bril prog
 pub struct ProgCfgs(pub Vec<(FuncCtx, Cfg)>);
@@ -64,13 +65,16 @@ impl ProgCfgs {
 }
 
 #[derive(Debug)]
-pub struct Cfg(pub Vec<NodeRef>);
+pub struct Cfg {
+    pub nodes: Vec<NodeRef>,
+    pub root: WeakNodeRef 
+}
 
 #[derive(Debug)]
 pub struct CfgNode {
     pub label: Option<String>,
     pub blk: BasicBlock,
-    pub successors: Vec<NodeRef>,
+    pub successors: Vec<WeakNodeRef>,
 }
 
 impl Cfg {
@@ -91,10 +95,10 @@ impl Cfg {
             })
             .collect();
 
-        let mut node_by_label = HashMap::<String, NodeRef>::new();
+        let mut node_by_label = HashMap::<String, WeakNodeRef>::new();
         for node in &nodes {
             if let Some(label) = &node.lock().unwrap().label {
-                node_by_label.insert(String::from(label), Arc::clone(node));
+                node_by_label.insert(String::from(label), Arc::downgrade(node));
             }
         }
 
@@ -114,7 +118,7 @@ impl Cfg {
                         )
                     } else if i < nodes.len() - 1 {
                         // if non-terminator, we try to execute the following block
-                        Some(vec![nodes[i + 1].clone()])
+                        Some(vec![Arc::downgrade(&nodes[i + 1])])
                     } else {
                         None
                     }
@@ -123,7 +127,7 @@ impl Cfg {
                 None => {
                     debug_assert!(node_lock.label.is_some());
                     if i < nodes.len() - 1 {
-                        Some(vec![nodes[i + 1].clone()])
+                        Some(vec![Arc::downgrade(&nodes[i + 1])])
                     } else {
                         None
                     }
@@ -136,8 +140,11 @@ impl Cfg {
                 node_lock.successors.extend(successors);
             }
         }
-
-        Self(nodes)
+        let root = Arc::downgrade(&nodes[0]);
+        Self {
+            nodes,
+            root
+        }
     }
 
     pub fn port_graph_as_dot(&self) -> String {
@@ -174,7 +181,7 @@ impl Cfg {
                 if !self.vis[cur_idx] {
                     self.vis[cur_idx] = true;
                     for child in &cur.lock().unwrap().successors {
-                        self.dfs(Some(cur_idx), Arc::clone(child));
+                        self.dfs(Some(cur_idx), Weak::upgrade(child).unwrap());
                     }
                 }
             }
@@ -182,7 +189,7 @@ impl Cfg {
 
         // relabel nodes indexed from 0
         let relabeled_nodes: HashMap<NodePtr, usize> = self
-            .0
+            .nodes
             .iter()
             .enumerate()
             .map(|(i, node)| (Arc::as_ptr(node), i))
@@ -190,14 +197,14 @@ impl Cfg {
 
         let visitor = Visitor {
             relabeled_nodes,
-            vis: vec![false; self.0.len()],
-            first: self.0[0].clone(),
+            vis: vec![false; self.nodes.len()],
+            first: self.root.upgrade().unwrap(),
             edges: vec![],
         };
 
         let edges = visitor.find_edges();
         let nodes_desc: Vec<String> = self
-            .0
+            .nodes
             .iter()
             .enumerate()
             .map(|(i, node)| {
