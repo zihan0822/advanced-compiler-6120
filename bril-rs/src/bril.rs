@@ -16,10 +16,11 @@ impl Prog {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Function {
     pub name: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<Arg>>,
-    #[serde(default, rename = "type")]
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub ty: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub instrs: Vec<LabelOrInst>,
 }
 
@@ -31,22 +32,32 @@ pub struct Arg {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum ValueLit {
+    Int(i32),
+    Bool(bool),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase", untagged)]
 pub enum LabelOrInst {
     Inst {
         op: String,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         dest: Option<String>,
 
-        #[serde(default, rename = "type")]
+        #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
         ty: Option<String>,
 
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         args: Option<Vec<String>>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         funcs: Option<Vec<String>>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         labels: Option<Vec<String>>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<ValueLit>,
     },
     Label {
         label: String,
