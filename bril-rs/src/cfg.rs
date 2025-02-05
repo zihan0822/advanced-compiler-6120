@@ -288,7 +288,9 @@ impl BasicBlock {
                 LabelOrInst::Label { label } => {
                     if cur_blk.label.is_none() && cur_blk.instrs.is_empty() {
                         cur_blk.label = Some(label.clone());
-                    } else {
+                        cur_blk.instrs.push(instr.clone());
+                    } 
+                    else {
                         blks.push(std::mem::replace(
                             &mut cur_blk,
                             Self::new_with_label(label.clone()),
@@ -311,8 +313,8 @@ impl BasicBlock {
 
     fn new_with_label(label: String) -> Self {
         Self {
-            label: Some(label),
-            instrs: vec![],
+            label: Some(label.clone()),
+            instrs: vec![LabelOrInst::Label {label}],
         }
     }
 
