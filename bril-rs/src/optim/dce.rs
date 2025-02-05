@@ -116,7 +116,7 @@ impl ValueNumberingCtx {
                     // be routed here
                     self.insert_new_numbering(
                         dest.as_ref().unwrap(),
-                        CanonicalForm::from_op_and_args("id", &[self.next_number]),
+                        CanonicalForm::from_op_and_numbered_args("id", &[self.next_number.to_string()]),
                         *value,
                     );
                 } else if let Some(dest) = dest {
@@ -135,7 +135,7 @@ impl ValueNumberingCtx {
                             }
                             self.var2numbering.insert(dest.clone(), num_entry);
                         }
-                        Err(NumTableErr::EntryNotFound(canon_form)) => {
+                        Err(canon_form) => {
                             // not found entry
                             let const_lit = if self.const_folding {
                                 self.try_eval_const_expr(op, args_lit)
@@ -152,14 +152,15 @@ impl ValueNumberingCtx {
                                 let reduced_args = args_lit
                                     .iter()
                                     .map(|arg| {
-                                        self.var2numbering.get(arg).unwrap().canonical_var.clone()
+                                        self.var2numbering.get(arg).map_or(
+                                            arg.clone(),
+                                            |entry| entry.canonical_var.clone()
+                                        )
                                     })
                                     .collect();
                                 *args = Some(reduced_args);
                             }
                         }
-                        // yet to impl, this handles the case where some of the argument comes from
-                        Err(NumTableErr::ArgNotNumbered) => unreachable!(),
                     };
                 } else if let Some(ref mut args) = args {
                     *args = args
@@ -204,25 +205,23 @@ impl ValueNumberingCtx {
         &self,
         op: &str,
         args: &[String],
-    ) -> Result<Arc<NumTableEntry>, NumTableErr> {
-        dbg!(args);
-        dbg!(&self.var2numbering);
-        dbg!(&self.num_table);
-
-        let mut renumbered_args: Vec<usize> = vec![];
+    ) -> Result<Arc<NumTableEntry>, CanonicalForm> {
+        let mut renumbered_args: Vec<String> = vec![];
         for arg in args {
+            // if we can find arg in current block's var2numbering map, we use its numbering
+            // otherwise, arg should be defined in upper stream ancestor block, we keep its name
             renumbered_args.push(
-                self.var2numbering
-                    .get(arg)
-                    .ok_or(NumTableErr::ArgNotNumbered)?
-                    .numbering,
+                self.var2numbering.get(arg).map_or(
+                    arg.clone(),
+                    |entry| entry.numbering.to_string()
+                )
             );
         }
-        let num_table_key = CanonicalForm::from_op_and_args(op, &renumbered_args);
+        let num_table_key = CanonicalForm::from_op_and_numbered_args(op, &renumbered_args);
         self.num_table
             .get(&num_table_key)
             .cloned()
-            .ok_or(NumTableErr::EntryNotFound(num_table_key))
+            .ok_or(num_table_key)
     }
 
     fn try_eval_const_expr(&self, op: &str, args: &[String]) -> Option<ValueLit> {
@@ -276,17 +275,11 @@ impl ValueNumberingCtx {
     }
 }
 
-enum NumTableErr {
-    EntryNotFound(CanonicalForm),
-    // this might happen if argument is defined outside this basic block
-    ArgNotNumbered,
-}
-
 #[derive(Eq, Hash, PartialEq, Debug)]
 struct CanonicalForm {
     op: String,
     // associativity is exploited
-    numbered_args: Vec<usize>,
+    numbered_args: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -297,8 +290,8 @@ struct NumTableEntry {
 }
 
 impl CanonicalForm {
-    fn from_op_and_args(op: &str, numbered_args: &[usize]) -> Self {
-        let mut numbered_args: Vec<_> = numbered_args.to_vec();
+    fn from_op_and_numbered_args(op: &str, numbered_args: &[String]) -> Self {
+        let mut numbered_args: Vec<String> = numbered_args.to_vec();
         if matches!(op, "add" | "mul") {
             numbered_args.sort()
         }
@@ -316,15 +309,19 @@ impl CanonicalForm {
 /// it is considered to be safe even in inter-basic-block context
 pub fn conservative_var_renaming(blk: &mut BasicBlock) {
     // first pass found all variable that needs renaming
-    let mut rename_scheme = HashMap::new();
+    let mut rename_scheme: HashMap<String, Vec<&mut String>> = HashMap::new();
     for inst in blk.instrs.iter_mut().rev() {
         if let LabelOrInst::Inst {
             dest: Some(ref mut dest),
             ..
         } = inst
         {
-            if let Some(mangled_name) = rename_scheme.insert(dest.clone(), var_mangle_scheme(dest))
+            if let Some(playback) = rename_scheme.insert(dest.clone(), vec![])
             {
+                let mangled_name = var_mangle_scheme(dest);
+                for arg in playback {
+                    *arg = mangled_name.clone();
+                }
                 *dest = mangled_name;
             }
         }
@@ -333,8 +330,8 @@ pub fn conservative_var_renaming(blk: &mut BasicBlock) {
         } = inst
         {
             for arg in args.iter_mut() {
-                if let Some(mangled_name) = rename_scheme.get(arg) {
-                    *arg = mangled_name.clone();
+                if let Some(playback) = rename_scheme.get_mut(arg) {
+                    playback.push(arg);
                 }
             }
         }
