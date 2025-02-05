@@ -1,18 +1,31 @@
-use crate::bril::{Function, LabelOrInst, Prog};
+use crate::bril::{Arg, Function, LabelOrInst, Prog};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 type NodeRef = Arc<Mutex<CfgNode>>;
 
 /// maintains cfg for each function in input bril prog
-pub struct ProgCfgs(pub Vec<(String, Cfg)>);
+pub struct ProgCfgs(pub Vec<(FuncCtx, Cfg)>);
+
+pub struct FuncCtx {
+    pub name: String,
+    pub args: Option<Vec<Arg>>,
+    pub ty: Option<String>,
+}
 
 impl ProgCfgs {
     pub fn from_bril_prog(prog: &Prog) -> Self {
         let cfgs = prog
             .functions
             .iter()
-            .map(|f| (f.name.clone(), Cfg::from_bril_func(f)))
+            .map(|f| {
+                let func_ctx = FuncCtx {
+                    name: f.name.clone(),
+                    args: f.args.clone(),
+                    ty: f.ty.clone(),
+                };
+                (func_ctx, Cfg::from_bril_func(f))
+            })
             .collect();
         Self(cfgs)
     }
@@ -22,8 +35,8 @@ impl ProgCfgs {
             .0
             .iter()
             .enumerate()
-            .map(|(i, (scope, cfg))| {
-                dbg!(scope);
+            .map(|(i, (func_ctx, cfg))| {
+                let scope = &func_ctx.name;
                 format!(
                     r#"
             subgraph cluster_{} {{
@@ -51,13 +64,13 @@ impl ProgCfgs {
 }
 
 #[derive(Debug)]
-pub struct Cfg(Vec<NodeRef>);
+pub struct Cfg(pub Vec<NodeRef>);
 
 #[derive(Debug)]
-struct CfgNode {
-    label: Option<String>,
-    blk: BasicBlock,
-    successors: Vec<NodeRef>,
+pub struct CfgNode {
+    pub label: Option<String>,
+    pub blk: BasicBlock,
+    pub successors: Vec<NodeRef>,
 }
 
 impl Cfg {
