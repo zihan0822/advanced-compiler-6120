@@ -2,8 +2,10 @@
 //!   - delete unused var
 use crate::bril::LabelOrInst;
 use crate::cfg::BasicBlock;
-use std::collections::{hash_map::Entry, HashMap};
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, atomic::{self, AtomicUsize}};
+
+static RENAME_COUNTER: AtomicUsize = AtomicUsize::new(42);
 
 pub fn dce(mut blk: BasicBlock) -> BasicBlock {
     let mut updated = false;
@@ -57,7 +59,6 @@ fn dce_scan(mut blk: BasicBlock) -> (BasicBlock, bool) {
     (blk, updated)
 }
 
-
 pub fn value_numbering(blk: BasicBlock) -> BasicBlock {
     let mut ctx = ValueNumberingCtx::new();
     ctx.numbering_scan(blk)
@@ -76,11 +77,10 @@ pub fn value_numbering(blk: BasicBlock) -> BasicBlock {
 ///                 - else:
 ///                     - insert new entry then bind
 /// Extension:
-///     1. op aware
+///     1. op aware [ok]
 ///     2. compile time const eval
 ///     3. intra-block dependency
-///     4. variable renumbering
-///
+///     4. variable renaming
 #[derive(Default)]
 pub struct ValueNumberingCtx {
     num_table: HashMap<CanonicalForm, NumTableEntry>,
@@ -101,10 +101,10 @@ impl ValueNumberingCtx {
                     // be routed here
                     self.insert_new_numbering(
                         &dest.as_ref().unwrap(),
-                        CanonicalForm::from_op_and_args("id", &vec![]),
+                        CanonicalForm::from_op_and_args("id", &vec![self.next_number]),
                     );
-                } else if Self::require_numbering(op) {
-                    let dest = dest.clone().unwrap();
+                } else if let Some(dest) = dest {
+                    let dest = dest.clone();
                     match self.numbering_query(op, &args.as_ref().unwrap()) {
                         Ok(num_entry) => {
                             *op = "id".to_string();
@@ -125,15 +125,17 @@ impl ValueNumberingCtx {
                             *args = Some(reduced_args);
                         }
                     };
+                } else {
+                    if let Some(ref mut args) = args {
+                        *args = args
+                            .iter()
+                            .map(|arg| self.var2numbering.get(arg).unwrap().canonical_var.clone())
+                            .collect();
+                    }
                 }
             }
         }
         blk
-    }
-
-    #[inline]
-    fn require_numbering(op: &str) -> bool {
-        matches!(op, "id" | "add" | "sub" | "mul" | "div")
     }
 
     /// create new numbering for variable `dest`
@@ -147,6 +149,7 @@ impl ValueNumberingCtx {
         self.num_table.insert(canon_form, new_entry);
         self.next_number += 1;
     }
+
     /// given bril inst as input
     /// may canonicalize it depending op type
     /// returns the numbering of dest var, if failed, returns a tuple of (canonical form, dest)
@@ -160,6 +163,7 @@ impl ValueNumberingCtx {
     fn numbering_query(&self, op: &str, args: &[String]) -> Result<NumTableEntry, CanonicalForm> {
         dbg!(args);
         dbg!(&self.var2numbering);
+        dbg!(&self.num_table);
         let renumbered_args: Vec<usize> = args
             .iter()
             .map(|arg| self.var2numbering.get(arg).unwrap().numbering)
@@ -196,4 +200,32 @@ impl CanonicalForm {
             numbered_args,
         }
     }
+}
+
+/// this function scans through inst list
+/// and renames every inst.dest which will be overwritten later in the basic block with a randomly generated name
+/// this resolves the problem of re-assigning canonical variable
+/// it is considered to be safe even in inter-basic-block context
+pub fn conservative_var_renaming(blk: &mut BasicBlock) {
+    // first pass found all variable that needs renaming 
+    let mut rename_scheme = HashMap::new();
+    for inst in blk.instrs.iter_mut().rev() {
+        if let LabelOrInst::Inst {dest: Some(ref mut dest), ..} = inst {
+            if let Some(mangled_name) = rename_scheme.insert(dest.clone(), var_mangle_scheme(&dest)) {
+                *dest = mangled_name; 
+            }
+        } 
+        if let LabelOrInst::Inst {args: Some(args), ..} = inst {
+            for arg in args.iter_mut() {
+                if let Some(mangled_name) = rename_scheme.get(arg) {
+                    *arg = mangled_name.clone();
+                }
+            }
+        }
+    }
+}
+
+
+fn var_mangle_scheme(origin_name: &str) -> String {
+    format!("__{origin_name}_{}", RENAME_COUNTER.fetch_add(1, atomic::Ordering::Relaxed))
 }
