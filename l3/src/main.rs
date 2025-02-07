@@ -26,7 +26,6 @@ fn main() -> std::io::Result<()> {
 
     let bril_prog = bril::Prog::from_json(&buf).unwrap();
     let local_optimizer = optim::LocalOptimizerBuilder::new()
-        .dce()
         .const_folding()
         .value_numbering()
         .finish();
@@ -35,20 +34,19 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn apply_blk_optim<F>(bril_prog: Prog, optimizer: F) -> Prog
+fn apply_blk_optim<F>(bril_prog: Prog, preprocessor: F) -> Prog
 where
     F: Fn(BasicBlock) -> BasicBlock,
 {
     let cfgs = cfg::ProgCfgs::from_bril_prog(&bril_prog);
     let mut functions = vec![];
     for (func_ctx, cfg) in cfgs.0.into_iter() {
-        let optimized_instrs = cfg
+        let optimized_instrs = optim::dce(cfg, &preprocessor)
             .nodes
             .iter()
             .flat_map(|node| {
-                let blk = &node.lock().unwrap().blk;
-                let optimized_blk = optimizer(blk.clone());
-                optimized_blk.instrs.into_iter()
+                let node_lock = node.lock().unwrap();
+                node_lock.blk.instrs.clone().into_iter()
             })
             .collect();
         let func = Function {

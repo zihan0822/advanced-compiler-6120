@@ -19,7 +19,7 @@ a: int = 10;   # 2
 b: int = a;    # 3
 print b;       # 4
 ```
-in this code, only `#1` will be eliminated, `#3` will be const folded into `b: int = 10`. `#2` will not be deleted because we assume that it will be used somewhere else in other blocks.
+in this code, only `#1` will be eliminated, `#3` will be const folded into `b: int = 10`. `#2` will only be deleted if current block does not have any successor in cfg 
 
 - **live-on-entry variables**: optimizer will not run on the entire block if any live-on-entry variable is re-assigned within the block. For example
 ```
@@ -33,6 +33,3 @@ We can not rename first `z` because it comes from ancestor blocks nor the second
 we choose to disable it for the entire block
 
 - **function call**: we introduce a new numbering for every return value of a function call even if all the numbering of its arguments are the same
-
-ALERT🚦: current commit is an aggressive implementation to better demonstrate the effect of optimization. Correctness is only guaranteed on `examples/*`. To make sure its correctness on other general cases, 
-the line that aggressively deletes live-on-exit variables in `optim/dce.rs:dce_scan` should be commented. 

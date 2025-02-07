@@ -2,8 +2,9 @@ use crate::bril::{Arg, Function, LabelOrInst, Prog};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 
-type NodeRef = Arc<Mutex<CfgNode>>;
-type WeakNodeRef = Weak<Mutex<CfgNode>>;
+pub type NodeRef = Arc<Mutex<CfgNode>>;
+pub type WeakNodeRef = Weak<Mutex<CfgNode>>;
+pub type NodePtr = *const Mutex<CfgNode>;
 
 /// maintains cfg for each function in input bril prog
 pub struct ProgCfgs(pub Vec<(FuncCtx, Cfg)>);
@@ -155,7 +156,6 @@ impl Cfg {
 
     /// output cfg in dot format
     fn nodes_and_edges_in_dot<F: Fn(usize) -> String>(&self, scoper: F) -> String {
-        type NodePtr = *const Mutex<CfgNode>;
 
         struct Visitor {
             first: NodeRef,

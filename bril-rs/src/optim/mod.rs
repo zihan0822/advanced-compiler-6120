@@ -1,5 +1,5 @@
 mod dce;
-use dce::{dce, value_numbering};
+pub use dce::dce;
 
 use crate::cfg::BasicBlock;
 
@@ -16,7 +16,6 @@ impl LocalOptimizer {
 }
 
 pub struct LocalOptimizerBuilder {
-    dce: bool,
     value_numbering: bool,
     const_folding: bool,
 }
@@ -24,7 +23,6 @@ pub struct LocalOptimizerBuilder {
 impl Default for LocalOptimizerBuilder {
     fn default() -> Self {
         Self {
-            dce: true,
             value_numbering: true,
             const_folding: false,
         }
@@ -34,7 +32,6 @@ impl Default for LocalOptimizerBuilder {
 impl LocalOptimizerBuilder {
     pub fn new() -> Self {
         Self {
-            dce: false,
             value_numbering: false,
             const_folding: false,
         }
@@ -51,11 +48,6 @@ impl LocalOptimizerBuilder {
         self
     }
 
-    pub fn dce(mut self) -> Self {
-        self.dce = true;
-        self
-    }
-
     pub fn finish(self) -> LocalOptimizer {
         let mut pipeline: Vec<OptimScheme> = vec![];
         if self.value_numbering {
@@ -68,14 +60,11 @@ impl LocalOptimizerBuilder {
                     .is_empty()
                 {
                     // no optimization performed if there is incoming variable carried over from ancestor basic block
-                    value_numbering(blk, self.const_folding)
+                    dce::value_numbering(blk, self.const_folding)
                 } else {
                     blk
                 }
             }));
-        }
-        if self.dce {
-            pipeline.push(Box::new(dce));
         }
         LocalOptimizer(pipeline)
     }

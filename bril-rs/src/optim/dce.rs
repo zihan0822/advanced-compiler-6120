@@ -2,7 +2,7 @@
 //!   - delete unused var
 //!   - compile time const folding
 use crate::bril::{LabelOrInst, ValueLit};
-use crate::cfg::BasicBlock;
+use crate::cfg::{BasicBlock, Cfg};
 use std::collections::HashMap;
 use std::sync::{
     atomic::{self, AtomicUsize},
@@ -11,17 +11,28 @@ use std::sync::{
 
 static RENAME_COUNTER: AtomicUsize = AtomicUsize::new(7654);
 
-pub fn dce(mut blk: BasicBlock) -> BasicBlock {
+pub fn dce<F>(cfg: Cfg, local_optimizer: &F) -> Cfg
+where F: Fn(BasicBlock) -> BasicBlock
+{
+    for node in &cfg.nodes {
+        let mut node_lock = node.lock().unwrap();
+        let delete_live_on_exit = node_lock.successors.is_empty();
+        node_lock.blk = dce_on_blk(local_optimizer(node_lock.blk.clone()), delete_live_on_exit);
+    }
+    cfg
+}
+
+fn dce_on_blk(mut blk: BasicBlock, delete_live_on_exit: bool) -> BasicBlock {
     let mut updated;
     loop {
-        (blk, updated) = dce_scan(blk);
+        (blk, updated) = dce_on_blk_one_pass(blk, delete_live_on_exit);
         if !updated {
             break blk;
         }
     }
 }
 
-fn dce_scan(mut blk: BasicBlock) -> (BasicBlock, bool) {
+fn dce_on_blk_one_pass(mut blk: BasicBlock, delete_live_on_exit: bool) -> (BasicBlock, bool) {
     let mut to_be_deleted = vec![];
     let mut unused_variable: HashMap<String, usize> = HashMap::new();
 
@@ -43,7 +54,9 @@ fn dce_scan(mut blk: BasicBlock) -> (BasicBlock, bool) {
             }
         }
     }
-    to_be_deleted.extend(unused_variable.into_values());
+    if delete_live_on_exit {
+        to_be_deleted.extend(unused_variable.into_values());
+    }
     let updated = !to_be_deleted.is_empty();
 
     if updated {
