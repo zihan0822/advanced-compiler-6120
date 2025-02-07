@@ -1,5 +1,5 @@
 [workspace]
-members = ["bril-rs", "l2/bril-analyzer"]
+members = ["bril-rs", "l2/bril-analyzer", "l3"]
 
 [workspace.dependencies]
 bril-rs = { path = "bril-rs" }

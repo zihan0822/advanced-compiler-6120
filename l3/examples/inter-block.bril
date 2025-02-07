@@ -1,0 +1,12 @@
+@main {
+    a: int = const 5;
+    b: int = const 2;
+    d: int = const 3;
+    jmp .L;
+.L:
+    d: int = add d d;
+    e: int = add d a;
+    d: int = const 1;
+    f: int = id d;
+    print f;
+}
