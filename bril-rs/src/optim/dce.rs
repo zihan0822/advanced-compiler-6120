@@ -114,14 +114,50 @@ impl ValueNumberingCtx {
                 if op == "const" {
                     // op of const is considered to be `id`, so that later query of id `dest` will
                     // be routed here
-                    self.insert_new_numbering(
-                        dest.as_ref().unwrap(),
-                        CanonicalForm::from_op_and_numbered_args("id", &[self.next_number.to_string()]),
-                        *value,
-                    );
+                    let dest = dest.clone().unwrap();
+                    let new_entry = Arc::new(NumTableEntry {
+                        numbering: self.next_number,
+                        canonical_var: dest.clone(),
+                        const_lit: *value,
+                    });
+                    let _ = self.var2numbering.insert(dest, new_entry);
+                    self.next_number += 1;
+                } else if op == "id" {
+                    let arg = &args.as_ref().unwrap()[0];
+                    let dest = dest.clone().unwrap();
+                    if let Some(num_entry) = self.var2numbering.get(arg) {
+                        if self.const_folding && num_entry.const_lit.is_some() {
+                            *args = None;
+                            *op = "const".to_string();
+                            *value = num_entry.const_lit;
+                        } else {
+                            *args = Some(vec![num_entry.canonical_var.clone()]);
+                        }
+                        let _ = self.var2numbering.insert(dest, Arc::clone(num_entry));
+                    } else {
+                        // otherwise, arg coming from upperstream basic block, we do not do anything
+                        let new_entry = Arc::new(NumTableEntry {
+                            numbering: self.next_number,
+                            canonical_var: arg.clone(),
+                            const_lit: None,
+                        });
+                        let _ = self.var2numbering.insert(dest, new_entry);
+                        self.next_number += 1;
+                    }
                 } else if let Some(dest) = dest {
-                    let dest = dest.clone();
-                    // vector of args literal
+                    // for function call, return value may be different even the (call, func, *args) tuple is the same
+                    if op == "call" {
+                        let new_entry = Arc::new(NumTableEntry {
+                            numbering: self.next_number,
+                            canonical_var: dest.clone(),
+                            const_lit: None,
+                        });
+                        self.next_number += 1;
+                        let _ = self.var2numbering.insert(dest.clone(), new_entry);
+                        continue;
+                    }
+
+                    // remaining are deterministic ops, for example add, lt, mul, ...
                     let args_lit = &args.as_ref().unwrap();
                     match self.numbering_query(op, args_lit) {
                         Ok(num_entry) => {
@@ -142,7 +178,7 @@ impl ValueNumberingCtx {
                             } else {
                                 None
                             };
-                            self.insert_new_numbering(&dest, canon_form, const_lit);
+                            self.insert_new_numbering(dest, canon_form, const_lit);
                             // this might fallback to another branch if any of the args can not be const evaled
                             if let Some(const_lit) = const_lit {
                                 *op = "const".to_string();
@@ -152,10 +188,9 @@ impl ValueNumberingCtx {
                                 let reduced_args = args_lit
                                     .iter()
                                     .map(|arg| {
-                                        self.var2numbering.get(arg).map_or(
-                                            arg.clone(),
-                                            |entry| entry.canonical_var.clone()
-                                        )
+                                        self.var2numbering.get(arg).map_or(arg.clone(), |entry| {
+                                            entry.canonical_var.clone()
+                                        })
                                     })
                                     .collect();
                                 *args = Some(reduced_args);
@@ -165,7 +200,11 @@ impl ValueNumberingCtx {
                 } else if let Some(ref mut args) = args {
                     *args = args
                         .iter()
-                        .map(|arg| self.var2numbering.get(arg).unwrap().canonical_var.clone())
+                        .map(|arg| {
+                            self.var2numbering
+                                .get(arg)
+                                .map_or(arg.clone(), |entry| entry.canonical_var.clone())
+                        })
                         .collect();
                 }
             }
@@ -211,10 +250,9 @@ impl ValueNumberingCtx {
             // if we can find arg in current block's var2numbering map, we use its numbering
             // otherwise, arg should be defined in upper stream ancestor block, we keep its name
             renumbered_args.push(
-                self.var2numbering.get(arg).map_or(
-                    arg.clone(),
-                    |entry| entry.numbering.to_string()
-                )
+                self.var2numbering
+                    .get(arg)
+                    .map_or(arg.clone(), |entry| entry.numbering.to_string()),
             );
         }
         let num_table_key = CanonicalForm::from_op_and_numbered_args(op, &renumbered_args);
@@ -307,7 +345,7 @@ impl CanonicalForm {
 /// we don't rename args which is not defined with the basic block
 /// this resolves the problem of re-assigning canonical variable
 /// it is considered to be safe even in inter-basic-block context
-pub fn conservative_var_renaming(blk: &mut BasicBlock) {
+pub fn conservative_var_renaming(blk: &mut BasicBlock) -> HashMap<String, Vec<&mut String>> {
     // first pass found all variable that needs renaming
     let mut rename_scheme: HashMap<String, Vec<&mut String>> = HashMap::new();
     for inst in blk.instrs.iter_mut().rev() {
@@ -316,13 +354,15 @@ pub fn conservative_var_renaming(blk: &mut BasicBlock) {
             ..
         } = inst
         {
-            if let Some(playback) = rename_scheme.insert(dest.clone(), vec![])
-            {
+            if let Some(playback) = rename_scheme.insert(dest.clone(), vec![]) {
                 let mangled_name = var_mangle_scheme(dest);
+                // if dest is never accessed we leave its name intact, so that it can be eliminated by later dce
+                if !playback.is_empty() {
+                    *dest = mangled_name.clone();
+                }
                 for arg in playback {
                     *arg = mangled_name.clone();
                 }
-                *dest = mangled_name;
             }
         }
         if let LabelOrInst::Inst {
@@ -336,6 +376,7 @@ pub fn conservative_var_renaming(blk: &mut BasicBlock) {
             }
         }
     }
+    rename_scheme
 }
 
 fn var_mangle_scheme(origin_name: &str) -> String {

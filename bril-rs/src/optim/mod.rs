@@ -60,8 +60,18 @@ impl LocalOptimizerBuilder {
         let mut pipeline: Vec<OptimScheme> = vec![];
         if self.value_numbering {
             pipeline.push(Box::new(move |mut blk| {
-                dce::conservative_var_renaming(&mut blk);
-                value_numbering(blk, self.const_folding)
+                let dangling_playback = dce::conservative_var_renaming(&mut blk);
+                if dangling_playback
+                    .into_values()
+                    .flat_map(|v| v.into_iter())
+                    .collect::<Vec<_>>()
+                    .is_empty()
+                {
+                    // no optimization performed if there is incoming variable carried over from ancestor basic block
+                    value_numbering(blk, self.const_folding)
+                } else {
+                    blk
+                }
             }));
         }
         if self.dce {

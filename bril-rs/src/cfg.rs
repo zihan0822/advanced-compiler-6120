@@ -67,7 +67,7 @@ impl ProgCfgs {
 #[derive(Debug)]
 pub struct Cfg {
     pub nodes: Vec<NodeRef>,
-    pub root: WeakNodeRef 
+    pub root: WeakNodeRef,
 }
 
 #[derive(Debug)]
@@ -141,10 +141,7 @@ impl Cfg {
             }
         }
         let root = Arc::downgrade(&nodes[0]);
-        Self {
-            nodes,
-            root
-        }
+        Self { nodes, root }
     }
 
     pub fn port_graph_as_dot(&self) -> String {
@@ -296,8 +293,7 @@ impl BasicBlock {
                     if cur_blk.label.is_none() && cur_blk.instrs.is_empty() {
                         cur_blk.label = Some(label.clone());
                         cur_blk.instrs.push(instr.clone());
-                    } 
-                    else {
+                    } else {
                         blks.push(std::mem::replace(
                             &mut cur_blk,
                             Self::new_with_label(label.clone()),
@@ -321,7 +317,7 @@ impl BasicBlock {
     fn new_with_label(label: String) -> Self {
         Self {
             label: Some(label.clone()),
-            instrs: vec![LabelOrInst::Label {label}],
+            instrs: vec![LabelOrInst::Label { label }],
         }
     }
 
