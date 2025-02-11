@@ -65,7 +65,7 @@ impl ProgCfgs {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Cfg {
     pub nodes: Vec<NodeRef>,
     pub root: WeakNodeRef,
@@ -76,6 +76,7 @@ pub struct CfgNode {
     pub label: Option<String>,
     pub blk: BasicBlock,
     pub successors: Vec<WeakNodeRef>,
+    pub predecessors: Vec<WeakNodeRef>,
 }
 
 impl Cfg {
@@ -92,6 +93,7 @@ impl Cfg {
                     label: blk.label.clone(),
                     blk: blk.clone(),
                     successors: vec![],
+                    predecessors: vec![],
                 }))
             })
             .collect();
@@ -138,6 +140,16 @@ impl Cfg {
 
             // do this in two pass to accommondate borrow checker
             if let Some(successors) = successors {
+                // update predecessor info
+                for successor in &successors {
+                    let successor = successor.upgrade().unwrap();
+                    successor
+                        .lock()
+                        .unwrap()
+                        .predecessors
+                        .push(Arc::downgrade(node));
+                }
+
                 node_lock.successors.extend(successors);
             }
         }
@@ -156,7 +168,6 @@ impl Cfg {
 
     /// output cfg in dot format
     fn nodes_and_edges_in_dot<F: Fn(usize) -> String>(&self, scoper: F) -> String {
-
         struct Visitor {
             first: NodeRef,
             vis: Vec<bool>,
