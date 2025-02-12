@@ -31,7 +31,7 @@ pub struct Arg {
     pub ty: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum ValueLit {
     Int(i32),
