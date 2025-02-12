@@ -4,7 +4,7 @@
 pub mod global;
 use crate::bril::{LabelOrInst, ValueLit};
 use crate::cfg::{BasicBlock, Cfg, NodePtr};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::sync::{
     atomic::{self, AtomicUsize},
     Arc,
@@ -16,7 +16,8 @@ pub fn dce<F>(cfg: Cfg, local_optimizer: &F) -> Cfg
 where
     F: Fn(BasicBlock) -> BasicBlock,
 {
-    let unused_dangling_vars: HashMap<NodePtr, HashSet<String>> = global::find_unused_variables_per_node(&cfg);
+    let unused_dangling_vars: HashMap<NodePtr, HashSet<String>> =
+        global::find_unused_variables_per_node(&cfg);
     for node in &cfg.nodes {
         let mut node_lock = node.lock().unwrap();
         let delete_live_on_exit = unused_dangling_vars.get(&Arc::as_ptr(node)).unwrap();
@@ -35,7 +36,10 @@ fn dce_on_blk(mut blk: BasicBlock, delete_live_on_exit: &HashSet<String>) -> Bas
     }
 }
 
-fn dce_on_blk_one_pass(mut blk: BasicBlock, delete_live_on_exit: &HashSet<String>) -> (BasicBlock, bool) {
+fn dce_on_blk_one_pass(
+    mut blk: BasicBlock,
+    delete_live_on_exit: &HashSet<String>,
+) -> (BasicBlock, bool) {
     let mut to_be_deleted = vec![];
     let mut unused_variable: HashMap<String, usize> = HashMap::new();
 
