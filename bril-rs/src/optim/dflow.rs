@@ -16,7 +16,7 @@ pub trait WorkListAlgo {
     const FORWARD_PASS: bool;
     type InFlowType;
     type OutFlowType;
-    fn transfer(node: &NodeRef, in_flow: Option<Self::InFlowType>) -> Self::OutFlowType;
+    fn transfer(&mut self, node: &NodeRef, in_flow: Option<Self::InFlowType>) -> Self::OutFlowType;
     fn merge(out_flow: Vec<Self::OutFlowType>) -> Self::InFlowType;
 
     fn successors(node: &NodeRef) -> Vec<NodeRef> {
@@ -48,7 +48,7 @@ pub trait WorkListAlgo {
         }
     }
 
-    fn execute(cfg: &Cfg) -> HashMap<NodePtr, Self::OutFlowType>
+    fn execute(&mut self, cfg: &Cfg) -> HashMap<NodePtr, Self::OutFlowType>
     where
         Self::OutFlowType: Clone + Eq,
     {
@@ -68,7 +68,7 @@ pub trait WorkListAlgo {
                 }
             };
 
-            let out_flow = Self::transfer(next_to_do, in_flow);
+            let out_flow = self.transfer(next_to_do, in_flow);
             let updated = out_states
                 .get(&next_ptr)
                 .map_or(true, |prev_state| !out_flow.eq(prev_state));
