@@ -108,8 +108,8 @@ impl Cfg {
         for (i, node) in nodes.iter().enumerate() {
             let mut node_lock = node.lock().unwrap();
 
-            let successors = match node_lock.blk.instrs.last() {
-                Some(LabelOrInst::Inst { op, labels, .. }) => {
+            let successors = match node_lock.blk.instrs.last().unwrap() {
+                LabelOrInst::Inst { op, labels, .. } => {
                     if is_terminator_op(op) {
                         Some(
                             labels
@@ -127,7 +127,7 @@ impl Cfg {
                     }
                 }
                 // handle the case where a basic label may only contain one label no instr
-                None => {
+                LabelOrInst::Label {..} => {
                     debug_assert!(node_lock.label.is_some());
                     if i < nodes.len() - 1 {
                         Some(vec![Arc::downgrade(&nodes[i + 1])])
@@ -135,7 +135,6 @@ impl Cfg {
                         None
                     }
                 }
-                _ => None,
             };
 
             // do this in two pass to accommondate borrow checker
