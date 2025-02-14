@@ -9,6 +9,7 @@ pub type NodePtr = *const Mutex<CfgNode>;
 /// maintains cfg for each function in input bril prog
 pub struct ProgCfgs(pub Vec<(FuncCtx, Cfg)>);
 
+#[derive(Clone)]
 pub struct FuncCtx {
     pub name: String,
     pub args: Option<Vec<Arg>>,
@@ -127,7 +128,7 @@ impl Cfg {
                     }
                 }
                 // handle the case where a basic label may only contain one label no instr
-                LabelOrInst::Label {..} => {
+                LabelOrInst::Label { .. } => {
                     debug_assert!(node_lock.label.is_some());
                     if i < nodes.len() - 1 {
                         Some(vec![Arc::downgrade(&nodes[i + 1])])

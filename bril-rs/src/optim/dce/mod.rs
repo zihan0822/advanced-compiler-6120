@@ -2,9 +2,12 @@
 //!   - delete unused var
 //!   - compile time const folding
 pub mod global;
+use crate::analyzer;
 use crate::bril::{LabelOrInst, ValueLit};
-use crate::cfg::{BasicBlock, Cfg, NodePtr};
+use crate::cfg::{BasicBlock, Cfg, FuncCtx, NodePtr};
+
 use std::collections::{HashMap, HashSet};
+use std::default::Default;
 use std::sync::{
     atomic::{self, AtomicUsize},
     Arc,
@@ -12,16 +15,40 @@ use std::sync::{
 
 static RENAME_COUNTER: AtomicUsize = AtomicUsize::new(7654);
 
-pub fn dce<F>(cfg: Cfg, local_optimizer: &F) -> Cfg
-where
-    F: Fn(BasicBlock) -> BasicBlock,
-{
+pub fn dce(cfg: Cfg, func_ctx: FuncCtx, global_const_folding: bool) -> Cfg {
+    let global_const_folding_ctx = if global_const_folding {
+        Some(analyzer::find_global_const_folding_ctx(&cfg, &func_ctx))
+    } else {
+        None
+    };
+
+    // expose dead code elimination opportunity
+    for node in &cfg.nodes {
+        let node_ptr = Arc::as_ptr(node);
+        let mut node_lock = node.lock().unwrap();
+
+        let vn_ctx_builder = ValueNumberingCtxBuilder::new();
+        let vn_ctx = if global_const_folding {
+            let const_folding_ctx = global_const_folding_ctx
+                .as_ref()
+                .unwrap()
+                .get(&node_ptr)
+                .unwrap();
+            vn_ctx_builder.global_const_ctx(const_folding_ctx).finish()
+        } else {
+            vn_ctx_builder.const_folding().finish()
+        };
+        node_lock.blk = value_numbering(node_lock.blk.clone(), vn_ctx);
+    }
+
     let unused_dangling_vars: HashMap<NodePtr, HashSet<String>> =
         global::find_unused_variables_per_node(&cfg);
+
     for node in &cfg.nodes {
+        let node_ptr = Arc::as_ptr(node);
         let mut node_lock = node.lock().unwrap();
-        let delete_live_on_exit = unused_dangling_vars.get(&Arc::as_ptr(node)).unwrap();
-        node_lock.blk = dce_on_blk(local_optimizer(node_lock.blk.clone()), delete_live_on_exit);
+        let delete_live_on_exit = unused_dangling_vars.get(&node_ptr).unwrap();
+        node_lock.blk = dce_on_blk(node_lock.blk.clone(), delete_live_on_exit);
     }
     cfg
 }
@@ -82,9 +109,19 @@ fn dce_on_blk_one_pass(
     (blk, updated)
 }
 
-pub fn value_numbering(blk: BasicBlock, const_folding: bool) -> BasicBlock {
-    let mut ctx = ValueNumberingCtx::new(const_folding);
-    ctx.numbering_scan(blk)
+pub fn value_numbering(mut blk: BasicBlock, mut ctx: ValueNumberingCtx) -> BasicBlock {
+    let dangling_playback = conservative_var_renaming(&mut blk);
+    if dangling_playback
+        .into_values()
+        .flat_map(|v| v.into_iter())
+        .collect::<Vec<_>>()
+        .is_empty()
+    {
+        // no optimization performed if there is incoming variable carried over from ancestor basic block
+        ctx.numbering_scan(blk)
+    } else {
+        blk
+    }
 }
 /// data structs used in local numbering
 ///
@@ -112,14 +149,44 @@ pub struct ValueNumberingCtx {
     const_folding: bool,
 }
 
-impl ValueNumberingCtx {
-    pub fn new(const_folding: bool) -> Self {
-        Self {
-            const_folding,
-            ..std::default::Default::default()
+pub struct ValueNumberingCtxBuilder(ValueNumberingCtx);
+impl Default for ValueNumberingCtxBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ValueNumberingCtxBuilder {
+    pub fn new() -> Self {
+        Self(ValueNumberingCtx {
+            const_folding: false,
+            ..Default::default()
+        })
+    }
+    pub fn const_folding(mut self) -> Self {
+        self.0.const_folding = true;
+        self
+    }
+    pub fn global_const_ctx(mut self, in_flow: &HashMap<String, ValueLit>) -> Self {
+        self.0.const_folding = true;
+        for (var, const_lit) in in_flow {
+            let entry = Arc::new(NumTableEntry {
+                canonical_var: var.clone(),
+                const_lit: Some(*const_lit),
+                numbering: self.0.next_number,
+            });
+            self.0.var2numbering.insert(var.clone(), entry);
+            self.0.next_number += 1;
         }
+        self
     }
 
+    pub fn finish(self) -> ValueNumberingCtx {
+        self.0
+    }
+}
+
+impl ValueNumberingCtx {
     pub fn numbering_scan(&mut self, mut blk: BasicBlock) -> BasicBlock {
         for inst in &mut blk.instrs {
             if let LabelOrInst::Inst {

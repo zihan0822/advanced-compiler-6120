@@ -1,6 +1,6 @@
 use crate::bril::{LabelOrInst, ValueLit};
 use crate::cfg::{Cfg, FuncCtx, NodePtr, NodeRef};
-use crate::optim::dflow::WorkListAlgo;
+use crate::optim::{self, dflow::WorkListAlgo};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::sync::{Arc, Weak};
@@ -10,11 +10,30 @@ use std::sync::{Arc, Weak};
 ///     U {out[p]} but exclude those conflict variables
 /// transfer:
 ///       in[n] add const var, exclude non-const var
-struct GlobalConstPropAlgo;
+struct GlobalConstPropAlgo<'a> {
+    root_ptr: NodePtr,
+    func_args: Option<Vec<&'a String>>,
+}
 
-pub fn global_const_prop(cfg: &Cfg) -> Vec<(Option<String>, HashMap<String, ValueLit>)> {
-    let ret = GlobalConstPropAlgo.execute(cfg);
-    let mut outputs = vec![];
+impl<'a> GlobalConstPropAlgo<'a> {
+    fn new(cfg: &Cfg, func_ctx: &'a FuncCtx) -> Self {
+        Self {
+            root_ptr: Weak::as_ptr(&cfg.root),
+            func_args: func_ctx
+                .args
+                .as_ref()
+                .map(|args| args.iter().map(|arg| &arg.name).collect()),
+        }
+    }
+}
+
+pub fn find_global_const_folding_ctx(
+    cfg: &Cfg,
+    func_ctx: &FuncCtx,
+) -> HashMap<NodePtr, HashMap<String, ValueLit>> {
+    let ret = GlobalConstPropAlgo::new(cfg, func_ctx).execute(cfg);
+    let mut global_ctx = HashMap::new();
+
     for node in &cfg.nodes {
         let node_ptr = Arc::as_ptr(node);
         let reached_consts: HashMap<_, _> = ret
@@ -30,21 +49,19 @@ pub fn global_const_prop(cfg: &Cfg) -> Vec<(Option<String>, HashMap<String, Valu
                 }
             })
             .collect();
-        if !reached_consts.is_empty() {
-            let label = node.lock().unwrap().blk.label.clone();
-            outputs.push((label, reached_consts));
-        }
+        global_ctx.insert(node_ptr, reached_consts);
     }
-    outputs
+    global_ctx
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum VarType {
     Unknown,
+    NonConst,
     Const(ValueLit),
 }
 
-impl WorkListAlgo for GlobalConstPropAlgo {
+impl WorkListAlgo for GlobalConstPropAlgo<'_> {
     const FORWARD_PASS: bool = true;
     type InFlowType = HashMap<String, VarType>;
     type OutFlowType = HashMap<String, VarType>;
@@ -56,7 +73,17 @@ impl WorkListAlgo for GlobalConstPropAlgo {
     ) -> Self::OutFlowType {
         let node_lock = node.lock().unwrap();
         let blk = &node_lock.blk;
-        let mut var_tys = in_flows.unwrap_or_default();
+        let mut var_tys = if Arc::as_ptr(node) == self.root_ptr {
+            if let Some(ref args) = self.func_args {
+                args.iter()
+                    .map(|arg| (String::clone(arg), VarType::NonConst))
+                    .collect()
+            } else {
+                HashMap::new()
+            }
+        } else {
+            in_flows.unwrap_or_default()
+        };
         for inst in &blk.instrs {
             if let LabelOrInst::Inst {
                 dest: Some(dest),
@@ -85,6 +112,11 @@ impl WorkListAlgo for GlobalConstPropAlgo {
                             "id" => *const_args[0],
                             _ => unreachable!(),
                         }
+                    } else if args
+                        .iter()
+                        .any(|arg| matches!(var_tys.get(arg), Some(VarType::NonConst)))
+                    {
+                        VarType::NonConst
                     } else {
                         VarType::Unknown
                     };
@@ -96,6 +128,7 @@ impl WorkListAlgo for GlobalConstPropAlgo {
     }
 
     fn merge(out_flows: Vec<Self::OutFlowType>) -> Self::InFlowType {
+        dbg!(&out_flows);
         out_flows
             .into_iter()
             .reduce(|mut out_a, out_b| {
@@ -103,11 +136,12 @@ impl WorkListAlgo for GlobalConstPropAlgo {
                     out_a
                         .entry(var)
                         .and_modify(|prev_ty| match (*prev_ty, ty) {
-                            (VarType::Const(_), VarType::Unknown) => *prev_ty = VarType::Unknown,
+                            (VarType::Unknown, _) => *prev_ty = ty,
+                            (VarType::Const(_), VarType::NonConst) => *prev_ty = VarType::NonConst,
                             (VarType::Const(ref val_a), VarType::Const(ref val_b))
                                 if !val_b.eq(val_a) =>
                             {
-                                *prev_ty = VarType::Unknown
+                                *prev_ty = VarType::NonConst
                             }
                             _ => {}
                         })
@@ -197,6 +231,7 @@ impl<'a> UninitDetectAlgo<'a> {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum VarInitState {
     Uninit,
+    Unknown,
     Init,
 }
 
@@ -209,11 +244,15 @@ impl WorkListAlgo for UninitDetectAlgo<'_> {
         let node_ptr = Arc::as_ptr(node);
         let node_lock = node.lock().unwrap();
         let mut in_flow = if node_ptr == self.root_ptr {
-            self.func_args.as_ref().map_or(HashMap::new(), |args| {
+            let mut undefed = optim::dce::global::used_but_not_defed(&node_lock.blk);
+            let mut defed = self.func_args.as_ref().map_or(HashMap::new(), |args| {
                 args.iter()
                     .map(|arg| (String::clone(arg), VarInitState::Init))
                     .collect()
-            })
+            });
+            undefed.retain(|var| !defed.contains_key(var));
+            defed.extend(undefed.into_iter().map(|var| (var, VarInitState::Uninit)));
+            defed
         } else {
             in_flow.unwrap_or_default()
         };
@@ -234,24 +273,24 @@ impl WorkListAlgo for UninitDetectAlgo<'_> {
                     in_flow.insert(dest, VarInitState::Init);
                 } else {
                     let args = args.as_ref().unwrap();
-                    let mut uninit = false;
+                    let mut dest_state = VarInitState::Init;
                     for arg in args {
                         if let Some(arg_state) = in_flow.get(arg) {
                             if matches!(arg_state, VarInitState::Uninit) {
-                                uninit = true;
+                                dest_state = VarInitState::Uninit;
                             }
                         } else {
                             uninit_per_line.push(arg.clone());
-                            in_flow.insert(arg.clone(), VarInitState::Uninit);
-                            uninit = true;
+                            in_flow.insert(arg.clone(), VarInitState::Unknown);
+                            if dest_state == VarInitState::Init {
+                                dest_state = VarInitState::Unknown;
+                            }
                         }
                     }
-                    if uninit {
+                    if matches!(dest_state, VarInitState::Uninit) {
                         uninit_per_line.push(dest.clone());
-                        in_flow.insert(dest, VarInitState::Uninit);
-                    } else {
-                        in_flow.insert(dest, VarInitState::Init);
                     }
+                    in_flow.insert(dest, dest_state);
                 }
                 if uninit_per_line.is_empty() {
                     book_keeping.remove(&idx);
@@ -269,10 +308,10 @@ impl WorkListAlgo for UninitDetectAlgo<'_> {
             .reduce(|mut acc, flow| {
                 for (var, state) in flow.into_iter() {
                     acc.entry(var)
-                        .and_modify(|prev_state| {
-                            if let VarInitState::Uninit = *prev_state {
-                                *prev_state = state
-                            }
+                        .and_modify(|prev_state| match (*prev_state, state) {
+                            (VarInitState::Unknown, _) => *prev_state = state,
+                            (VarInitState::Init, VarInitState::Uninit) => *prev_state = state,
+                            _ => {}
                         })
                         .or_insert(state);
                 }
