@@ -1,0 +1,10 @@
+@main(n: int) {
+  a: int = const 100;
+  br cond .L .O;
+.L:
+  b: int = id a;
+  print b;
+.O:
+  a: int = id n;
+  jmp .L;
+}

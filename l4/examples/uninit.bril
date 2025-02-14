@@ -1,0 +1,9 @@
+@main(n: int) {
+    a: int = id m;
+    b: int = add a a;
+    jmp .L;
+.L:
+    c: int = mul n b;
+    c: int = const 100;
+    print c;
+}

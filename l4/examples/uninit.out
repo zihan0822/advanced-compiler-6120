@@ -1,0 +1,7 @@
+@main
+Label: .
+line 0: a
+line 1: b
+Label: .L
+line 1: c
+

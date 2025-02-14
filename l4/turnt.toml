@@ -1,0 +1,7 @@
+[envs.uninit]
+command = "bril2json < {filename} | ../target/release/l4"
+output.out = "-"
+
+[envs.const_prop]
+command = "bril2json < {filename} | ../target/release/l3 | bril2txt"
+output.out = "-"
