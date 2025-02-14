@@ -1,9 +1,5 @@
 use bril_rs::bril::*;
-use bril_rs::{
-    bril,
-    cfg::{self, BasicBlock},
-    optim,
-};
+use bril_rs::{bril, cfg, optim};
 
 use clap::Parser;
 use std::io::{BufReader, Read};
@@ -12,6 +8,8 @@ use std::io::{BufReader, Read};
 struct Args {
     #[arg(short)]
     f: Option<String>,
+    #[arg(short = 'g', default_value_t = false)]
+    with_global_ctx: bool,
 }
 
 fn main() -> std::io::Result<()> {
@@ -25,23 +23,16 @@ fn main() -> std::io::Result<()> {
     assert!(reader.read_to_string(&mut buf)? > 0);
 
     let bril_prog = bril::Prog::from_json(&buf).unwrap();
-    let local_optimizer = optim::LocalOptimizerBuilder::new()
-        .const_folding()
-        .value_numbering()
-        .finish();
-    let prog = apply_blk_optim(bril_prog, |blk| local_optimizer.run_all(blk));
+    let prog = apply_cfg_optim(bril_prog, args.with_global_ctx);
     println!("{:#}", serde_json::to_string(&prog).unwrap());
     Ok(())
 }
 
-fn apply_blk_optim<F>(bril_prog: Prog, preprocessor: F) -> Prog
-where
-    F: Fn(BasicBlock) -> BasicBlock,
-{
+fn apply_cfg_optim(bril_prog: Prog, with_global_ctx: bool) -> Prog {
     let cfgs = cfg::ProgCfgs::from_bril_prog(&bril_prog);
     let mut functions = vec![];
     for (func_ctx, cfg) in cfgs.0.into_iter() {
-        let optimized_instrs = optim::dce(cfg, &preprocessor)
+        let optimized_instrs = optim::dce(cfg, func_ctx.clone(), with_global_ctx)
             .nodes
             .iter()
             .flat_map(|node| {
