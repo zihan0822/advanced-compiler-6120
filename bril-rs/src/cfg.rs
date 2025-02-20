@@ -243,7 +243,7 @@ impl Cfg {
 
 impl CfgNode {
     /// little html codes for node content display
-    fn caption(&self) -> String {
+    pub fn caption(&self) -> String {
         let mut tags = vec![];
         if let Some(ref label) = self.label {
             tags.push(format!(
@@ -258,14 +258,14 @@ impl CfgNode {
             .blk
             .instrs
             .iter()
-            .take(2)
-            .map(|inst| {
+            .filter_map(|inst| {
                 if let LabelOrInst::Inst { op, .. } = inst {
-                    op.clone()
+                    Some(op.clone())
                 } else {
-                    unreachable!()
+                    None
                 }
             })
+            .take(2)
             .collect();
 
         if !instrs.is_empty() {
