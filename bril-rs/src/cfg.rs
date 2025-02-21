@@ -1,4 +1,5 @@
 use crate::bril::{Arg, Function, LabelOrInst, Prog};
+use crate::graphviz_prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -33,36 +34,46 @@ impl ProgCfgs {
         Self(cfgs)
     }
 
-    pub fn port_graph_as_dot(&self) -> String {
-        let subgraphs = self
+    pub fn port_as_dot_string(&self) -> String {
+        let g = self.port_as_dot();
+        g.print(&mut PrinterContext::default())
+    }
+
+    pub(crate) fn port_as_dot(&self) -> Graph {
+        let subgraphs: Vec<Subgraph> = self
             .0
             .iter()
             .enumerate()
             .map(|(i, (func_ctx, cfg))| {
-                let scope = &func_ctx.name;
-                format!(
-                    r#"
-            subgraph cluster_{} {{
-                label = "@{}";
-                labelloc = "t";
-                labeljust = "l";
-                style = "solid";
-                fontcolor = "brown";
-                {} 
-            }} 
-        "#,
-                    i,
-                    scope,
-                    cfg.nodes_and_edges_in_dot(|i| format!("{}_{}", scope, i))
-                )
+                let scope = format!(r#""@{}""#, &func_ctx.name);
+                let mut stmts = vec![
+                    stmt!(attr!("label", scope)),
+                    stmt!(attr!("labelloc", "t")),
+                    stmt!(attr!("labeljust", "l")),
+                    stmt!(attr!("style", "solid")),
+                    stmt!(attr!("fontcolor", "brown")),
+                ];
+                if let Graph::DiGraph {
+                    stmts: subgraph_stmts,
+                    ..
+                } = cfg.port_as_dot_with_scope(|i| format!("{}_{i}", &func_ctx.name))
+                {
+                    stmts.extend(subgraph_stmts)
+                } else {
+                    unreachable!()
+                }
+                Subgraph {
+                    id: id!(format!("cluster_{}", i)),
+                    stmts,
+                }
             })
             .collect::<Vec<_>>();
-        format!(
-            "digraph G {{
-            {} 
-        }}",
-            subgraphs.join("\n")
-        )
+
+        let mut g = graph!(di id!("G"));
+        for subgraph in subgraphs {
+            g.add_stmt(stmt!(subgraph));
+        }
+        g
     }
 }
 
@@ -157,17 +168,40 @@ impl Cfg {
         Self { nodes, root }
     }
 
-    pub fn port_graph_as_dot(&self) -> String {
-        format!(
-            "digraph CFG {{
-                {} 
-        }}",
-            self.nodes_and_edges_in_dot(|i| i.to_string())
-        )
+    pub fn port_as_dot_string(&self) -> String {
+        let g = self.port_as_dot();
+        g.print(&mut PrinterContext::default())
+    }
+
+    pub(crate) fn port_as_dot(&self) -> Graph {
+        let mut g = graph!(di id!("subrountine"));
+        let (nodes, edges) = self.nodes_and_edges_in_dot(|i| i.to_string());
+        for node in nodes.into_values() {
+            g.add_stmt(stmt!(node));
+        }
+        for edge in edges {
+            g.add_stmt(stmt!(edge))
+        }
+        g
+    }
+
+    pub(crate) fn port_as_dot_with_scope<F: Fn(usize) -> String>(&self, scoper: F) -> Graph {
+        let mut g = graph!(di id!("subrountine"));
+        let (nodes, edges) = self.nodes_and_edges_in_dot(scoper);
+        for node in nodes.into_values() {
+            g.add_stmt(stmt!(node));
+        }
+        for edge in edges {
+            g.add_stmt(stmt!(edge))
+        }
+        g
     }
 
     /// output cfg in dot format
-    fn nodes_and_edges_in_dot<F: Fn(usize) -> String>(&self, scoper: F) -> String {
+    pub(crate) fn nodes_and_edges_in_dot<F: Fn(usize) -> String>(
+        &self,
+        scoper: F,
+    ) -> (HashMap<NodePtr, DotNode>, Vec<DotEdge>) {
         struct Visitor {
             first: NodeRef,
             vis: Vec<bool>,
@@ -211,33 +245,25 @@ impl Cfg {
         };
 
         let edges = visitor.find_edges();
-        let nodes_desc: Vec<String> = self
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(i, node)| {
-                format!(
-                    r#"{} [label = {}]"#,
-                    scoper(i),
-                    node.lock().unwrap().caption()
-                )
-            })
-            .collect();
+        let (mut node_stmts_map, mut edge_stmts) = (HashMap::new(), vec![]);
 
-        let edge_desc: Vec<String> = edges
-            .iter()
-            .map(|(u, v)| format!("{} -> {}", scoper(*u), scoper(*v)))
-            .collect();
-
-        format!(
-            "
-                node [shape = box] \n\
-                {} \n\
-                {} \n\
-            ",
-            nodes_desc.join("\n"),
-            edge_desc.join("\n")
-        )
+        for (i, node) in self.nodes.iter().enumerate() {
+            let node_lock = node.lock().unwrap();
+            let node_id = scoper(i);
+            node_stmts_map.insert(
+                Arc::as_ptr(node),
+                node!(
+                    node_id;
+                    attr!("label", &node_lock.caption()),
+                    attr!("shape", "box")
+                ),
+            );
+        }
+        for (u, v) in &edges {
+            let (u_id, v_id) = (scoper(*u), scoper(*v));
+            edge_stmts.push(edge!(node_id!(u_id) => node_id!(v_id)));
+        }
+        (node_stmts_map, edge_stmts)
     }
 }
 
