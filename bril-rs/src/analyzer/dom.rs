@@ -65,7 +65,6 @@ fn draw_cfg_with_dom(
                 ]
             );
         }
-        dbg!(frontiers.len());
         for cfg_ptr in &frontiers {
             let dot_node = dot_nodes_map.get_mut(cfg_ptr).unwrap();
             dot_node.attributes.extend(
@@ -237,10 +236,8 @@ impl DomTree {
 
         let mut subtree_nodes = vec![];
         let mut frontier = HashSet::new();
-        // exclude root node
-        for child in &node.lock().unwrap().successors {
-            collect_subtree_nodes(&Weak::upgrade(child).unwrap(), &mut subtree_nodes);
-        }
+        // including input node itself, every node is considered to be self-dominated
+        collect_subtree_nodes(&node, &mut subtree_nodes);
         let target_cfg_ptr = {
             let dom_node_lock = node.lock().unwrap();
             Arc::as_ptr(&dom_node_lock.cfg_node)
