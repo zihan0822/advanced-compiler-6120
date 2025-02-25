@@ -1,0 +1,1 @@
+command = "bril2json < {filename} | ../target/release/l5 | dot -Tpng -o {filename}.png"
