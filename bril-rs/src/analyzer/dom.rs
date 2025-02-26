@@ -256,7 +256,8 @@ impl DomTree {
             let cfg_node = &dom_node_lock.cfg_node;
             for frontier_candidate in &cfg_node.lock().unwrap().successors {
                 let cfg_ptr = Weak::as_ptr(frontier_candidate);
-                if cfg_ptr != target_cfg_ptr && !ptr2nodes.contains_key(&cfg_ptr) {
+                // a node's dom frontier can be itself
+                if cfg_ptr == target_cfg_ptr || !ptr2nodes.contains_key(&cfg_ptr) {
                     frontier.insert(cfg_ptr);
                 }
             }
