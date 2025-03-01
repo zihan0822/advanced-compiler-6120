@@ -1,11 +1,16 @@
 use crate::bril::{Arg, Function, LabelOrInst, Prog};
 use crate::graphviz_prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, Weak};
 
 pub type NodeRef = Arc<Mutex<CfgNode>>;
 pub type WeakNodeRef = Weak<Mutex<CfgNode>>;
 pub type NodePtr = *const Mutex<CfgNode>;
+
+pub(crate) mod prelude {
+    pub(crate) use super::{BasicBlock, Cfg, CfgNode, FuncCtx};
+    pub(crate) use super::{NodePtr, NodeRef, WeakNodeRef};
+}
 
 /// maintains cfg for each function in input bril prog
 pub struct ProgCfgs(pub Vec<(FuncCtx, Cfg)>);
@@ -349,6 +354,40 @@ impl BasicBlock {
             blks.push(cur_blk);
         }
         blks
+    }
+
+    pub fn used_but_not_defed(&self) -> HashSet<String> {
+        let mut used = HashSet::new();
+        for inst in self.instrs.iter().rev() {
+            if let LabelOrInst::Inst {
+                dest: Some(dest), ..
+            } = inst
+            {
+                let _ = used.remove(dest);
+            }
+            if let LabelOrInst::Inst {
+                args: Some(args), ..
+            } = inst
+            {
+                used.extend(args.clone());
+            }
+        }
+        used
+    }
+
+    /// returns a set of all variables defined within the block but not used
+    /// this does not include variables that defined in uppersteam block
+    pub fn defs(&self) -> HashSet<String> {
+        let mut def = HashSet::new();
+        for inst in self.instrs.iter().rev() {
+            if let LabelOrInst::Inst {
+                dest: Some(dest), ..
+            } = inst
+            {
+                def.insert(dest.clone());
+            }
+        }
+        def
     }
 
     fn new_with_label(label: String) -> Self {
