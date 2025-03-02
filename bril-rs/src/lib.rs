@@ -2,6 +2,7 @@ pub mod analyzer;
 pub mod bril;
 pub mod cfg;
 pub mod optim;
+pub mod transform;
 
 mod graphviz_prelude {
     pub use dot_generator::*;

@@ -22,7 +22,7 @@ pub fn find_unused_variables_per_node(cfg: &Cfg) -> HashMap<NodePtr, HashSet<Str
     unused_var_per_node
 }
 
-struct LivenessAnalysis;
+pub struct LivenessAnalysis;
 
 impl WorkListAlgo for LivenessAnalysis {
     const FORWARD_PASS: bool = false;

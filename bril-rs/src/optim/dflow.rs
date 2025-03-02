@@ -71,7 +71,7 @@ pub trait WorkListAlgo {
             let out_flow = self.transfer(next_to_do, in_flow);
             let updated = out_states
                 .get(&next_ptr)
-                .map_or(true, |prev_state| !out_flow.eq(prev_state));
+                .is_none_or(|prev_state| !out_flow.eq(prev_state));
             if updated {
                 let successor = Self::successors(next_to_do);
                 let _ = out_states.insert(next_ptr, out_flow);

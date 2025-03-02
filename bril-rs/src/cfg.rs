@@ -7,6 +7,7 @@ pub type NodeRef = Arc<Mutex<CfgNode>>;
 pub type WeakNodeRef = Weak<Mutex<CfgNode>>;
 pub type NodePtr = *const Mutex<CfgNode>;
 
+#[allow(unused_imports)]
 pub(crate) mod prelude {
     pub(crate) use super::{BasicBlock, Cfg, CfgNode, FuncCtx};
     pub(crate) use super::{NodePtr, NodeRef, WeakNodeRef};

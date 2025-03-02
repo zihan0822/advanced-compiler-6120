@@ -16,12 +16,13 @@ pub fn draw_prog_with_dom_as_dot_string(prog: &ProgCfgs) -> String {
         // randomly choose one node to compute its frontier
         let frontier_target = cfg.nodes[1..].choose(&mut rng);
         let func_graph = draw_cfg_with_dom(cfg, frontier_target, func_ctx);
-        if let Graph::DiGraph {stmts, ..} = func_graph {
+        if let Graph::DiGraph { stmts, .. } = func_graph {
             g.add_stmt(stmt!(Subgraph {
-                id: id!(format!("cluster_{i}")), stmts
+                id: id!(format!("cluster_{i}")),
+                stmts
             }));
         }
-    } 
+    }
     g.print(&mut PrinterContext::default())
 }
 
@@ -53,26 +54,26 @@ fn draw_cfg_with_dom(
         .collect();
     if let Some(frontier_target) = highlight_frontier_for {
         let frontiers = DomTree::domination_frontier(
-            cfg_ptr2dom_node.get(&Arc::as_ptr(frontier_target)).unwrap().clone()
+            cfg_ptr2dom_node
+                .get(&Arc::as_ptr(frontier_target))
+                .unwrap()
+                .clone(),
         );
         // coloring the node for which we are looking for its dom frontier
         if !frontiers.is_empty() {
-            let dot_node = dot_nodes_map.get_mut(&Arc::as_ptr(frontier_target)).unwrap();
-            dot_node.attributes.extend(
-                vec![
-                    attr!("fillcolor", "coral1"),
-                    attr!("style", "filled")
-                ]
-            );
+            let dot_node = dot_nodes_map
+                .get_mut(&Arc::as_ptr(frontier_target))
+                .unwrap();
+            dot_node
+                .attributes
+                .extend(vec![attr!("fillcolor", "coral1"), attr!("style", "filled")]);
         }
         for cfg_ptr in &frontiers {
             let dot_node = dot_nodes_map.get_mut(cfg_ptr).unwrap();
-            dot_node.attributes.extend(
-                vec![
-                    attr!("fillcolor", "darkolivegreen2"),
-                    attr!("style", "filled")
-                ]
-            );
+            dot_node.attributes.extend(vec![
+                attr!("fillcolor", "darkolivegreen2"),
+                attr!("style", "filled"),
+            ]);
         }
     }
     let mut g = graph!(di id!(func_name));
