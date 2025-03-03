@@ -30,6 +30,51 @@ pub fn cfg_into_ssa(mut cfg: Cfg, func_ctx: FuncCtx) -> Cfg {
     cfg
 }
 
+pub fn cfg_from_ssa(cfg: Cfg) -> Cfg {
+    let mut to_get_tys = HashMap::new();
+    for node in &cfg.nodes {
+        for inst in &node.lock().unwrap().blk.instrs {
+            if let LabelOrInst::Inst {
+                op,
+                dest: Some(dest),
+                ty: Some(ty),
+                ..
+            } = inst
+            {
+                if op == "get" {
+                    assert!(to_get_tys.insert(dest.clone(), ty.clone()).is_none());
+                }
+            }
+        }
+    }
+
+    for node in &cfg.nodes {
+        let mut node_lock = node.lock().unwrap();
+        let instrs = &mut node_lock.blk.instrs;
+        // delete all get instr
+        instrs.retain(|inst| !matches!(inst, LabelOrInst::Inst {op, ..} if op == "get"));
+        instrs.iter_mut().for_each(|inst| {
+            if let LabelOrInst::Inst {
+                op,
+                args: Some(args),
+                dest,
+                ty,
+                ..
+            } = inst
+            {
+                if op == "set" {
+                    *op = "id".to_string();
+                    let (to_set, canonical_repr) = (args[0].clone(), args[1].clone());
+                    *ty = Some(to_get_tys.get(&to_set).unwrap().clone());
+                    *dest = Some(to_set);
+                    *args = vec![canonical_repr];
+                }
+            }
+        })
+    }
+    cfg
+}
+
 fn require_dummy_entry_blk(cfg: &Cfg, func_ctx: &FuncCtx) -> Option<BasicBlock> {
     let root_node = cfg.root.upgrade().unwrap();
     let root_node_lock = root_node.lock().unwrap();
