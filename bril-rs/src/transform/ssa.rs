@@ -1,8 +1,7 @@
-use crate::analyzer::dom::{DomNodeRef, DomTree};
 use crate::bril::LabelOrInst;
 use crate::cfg::prelude::*;
 use crate::optim::dflow::WorkListAlgo;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::default::Default;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -30,6 +29,7 @@ pub fn cfg_into_ssa(mut cfg: Cfg, func_ctx: FuncCtx) -> Cfg {
     ssa_ctx.walk_cfg();
     cfg
 }
+
 fn require_dummy_entry_blk(cfg: &Cfg, func_ctx: &FuncCtx) -> Option<BasicBlock> {
     let root_node = cfg.root.upgrade().unwrap();
     let root_node_lock = root_node.lock().unwrap();
@@ -61,8 +61,6 @@ fn require_dummy_entry_blk(cfg: &Cfg, func_ctx: &FuncCtx) -> Option<BasicBlock> 
 struct SSATransContext<'a> {
     cfg: &'a Cfg,
     func_ctx: &'a FuncCtx,
-    dom_tree: DomTree,
-    cfg_ptr2dom_node: HashMap<NodePtr, DomNodeRef>,
     blk_cache: HashMap<NodePtr, PerBlockCache>,
 }
 
@@ -71,42 +69,68 @@ struct PerBlockCache {
     // original-new -> new-name
     renamed_live_in: HashMap<String, String>,
     renamed_live_out: HashMap<String, String>,
-    acc_live_in: HashMap<String, String>,
+    reach_def: HashMap<String, HashSet<NodePtr>>,
     live_in_ty: HashMap<String, String>,
-    live_in_may_shadow: HashMap<String, String>,
+    live_in_may_shadow: HashSet<String>,
 }
 
 impl<'a> SSATransContext<'a> {
     fn new(cfg: &'a Cfg, func_ctx: &'a FuncCtx) -> Self {
-        let mut cfg_ptr2dom_node = HashMap::new();
-        let dom_tree = DomTree::from_cfg(cfg);
-        for dom_node in &dom_tree.nodes {
-            let dom_node_lock = dom_node.lock().unwrap();
-            let cfg_ptr = Arc::as_ptr(&dom_node_lock.cfg_node);
-            cfg_ptr2dom_node.insert(cfg_ptr, Arc::clone(dom_node));
-        }
         Self {
             cfg,
             func_ctx,
-            dom_tree,
-            cfg_ptr2dom_node,
             blk_cache: Default::default(),
         }
     }
 
     fn walk_cfg(&mut self) {
         // add dummy entry block if the current entry block can be the target of jump
-        self.update_liveness_cache();
+        self.update_reach_def_cache();
         self.per_blk_var_renaming();
-        self.inspect_dom_frontier();
         self.insert_set_and_get();
     }
 
-    fn update_liveness_cache(&mut self) {
-        let liveness_ret = LivenessAnalysisWithLabelBackProp.execute(self.cfg);
-        for (node_ptr, liveness_vars) in liveness_ret {
-            let node_cache = self.blk_cache.entry(node_ptr).or_default();
-            node_cache.acc_live_in = liveness_vars;
+    fn update_reach_def_cache(&mut self) {
+        let func_args_and_ty = self.func_ctx.args.as_ref().map_or(HashMap::new(), |args| {
+            args.iter()
+                .map(|arg| (arg.name.clone(), arg.ty.clone()))
+                .collect()
+        });
+        let mut reach_def_ctx = ReachDefWithLabelProp {
+            root_ptr: Weak::as_ptr(&self.cfg.root),
+            args_ty: func_args_and_ty,
+        };
+        let reach_def_ret = reach_def_ctx.execute(self.cfg);
+
+        for node in &self.cfg.nodes {
+            let node_ptr = Arc::as_ptr(node);
+            let node_lock = node.lock().unwrap();
+            let cache = self.blk_cache.entry(node_ptr).or_default();
+            let pred_reach_defs = node_lock
+                .predecessors
+                .iter()
+                .map(|pred| reach_def_ret.get(&Weak::as_ptr(pred)).unwrap());
+
+            cache.reach_def = pred_reach_defs.fold(
+                HashMap::<String, HashSet<NodePtr>>::new(),
+                |mut acc, next| {
+                    for (var, from) in next.clone() {
+                        acc.entry(var).or_default().extend(from);
+                    }
+                    acc
+                },
+            );
+            cache.live_in_may_shadow = cache
+                .reach_def
+                .iter()
+                .filter_map(|(var, remote_list)| {
+                    if remote_list.len() > 1 {
+                        Some(var.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
         }
     }
 
@@ -153,42 +177,44 @@ impl<'a> SSATransContext<'a> {
         }
     }
 
-    fn inspect_dom_frontier(&mut self) {
+    fn insert_set_and_get(&mut self) {
+        // first pass update renamed-live-out if in-coming var may shadow
         for node in &self.cfg.nodes {
-            let cfg_ptr = Arc::as_ptr(node);
-            let dom_node = self.cfg_ptr2dom_node.get(&cfg_ptr).unwrap();
-            let frontiers = DomTree::domination_frontier(Arc::clone(dom_node));
-
-            for frontier_ptr in frontiers {
-                let cache = self.blk_cache.get_mut(&frontier_ptr).unwrap();
-                cache.live_in_may_shadow.extend(cache.acc_live_in.clone());
+            let node_ptr = Arc::as_ptr(node);
+            let cache = self.blk_cache.get_mut(&node_ptr).unwrap();
+            for shadowed_name in cache
+                .live_in_may_shadow
+                .iter()
+                .filter(|var| cache.renamed_live_in.contains_key(var.as_str()))
+            {
+                // if incoming conflicting def is used somewhere is the blk
+                // and it is not overwritten by any liveout
+                if !cache.renamed_live_out.contains_key(shadowed_name) {
+                    cache.renamed_live_out.insert(
+                        shadowed_name.clone(),
+                        cache.renamed_live_in.get(shadowed_name).unwrap().clone(),
+                    );
+                }
             }
         }
-    }
 
-    fn insert_set_and_get(&mut self) {
-        fn preorder_recurse_on_dom_node(
-            node: &DomNodeRef,
-            mut non_ambiguious_var_renaming: HashMap<String, String>,
-            per_blk_cache: &HashMap<NodePtr, PerBlockCache>,
-        ) {
-            let dom_node_lock = node.lock().unwrap();
-            let cfg_node = &dom_node_lock.cfg_node;
-            let cfg_ptr = Arc::as_ptr(cfg_node);
-            let cache = per_blk_cache.get(&cfg_ptr).unwrap();
+        let mut registered_set_instrs: HashMap<NodePtr, Vec<LabelOrInst>> = HashMap::new();
 
-            // all the local renaming
-            let mut to_rename: HashMap<_, _> = cache.renamed_live_in.clone();
+        // second pass insert set/get instr
+        for node in &self.cfg.nodes {
+            let node_ptr = Arc::as_ptr(node);
+            let mut node_lock = node.lock().unwrap();
+            let cache = self.blk_cache.get(&node_ptr).unwrap();
+            let mut to_rename = cache.renamed_live_in.clone();
 
-            to_rename.iter_mut().for_each(|(var, new_name)| {
-                if !cache.live_in_may_shadow.contains_key(var) {
-                    let propgated_name = non_ambiguious_var_renaming.get(var).cloned().unwrap();
-                    *new_name = propgated_name;
+            for (var, new_name) in to_rename.iter_mut() {
+                // non-conflicting def, we fetch remote name
+                if !cache.live_in_may_shadow.contains(var) {
+                    *new_name = self.fetch_remote_name(node_ptr, var);
                 }
-            });
+            }
 
-            let mut cfg_node_lock = cfg_node.lock().unwrap();
-            for inst in cfg_node_lock.blk.instrs.iter_mut() {
+            for inst in node_lock.blk.instrs.iter_mut() {
                 if let LabelOrInst::Inst {
                     args: Some(ref mut args),
                     ..
@@ -202,12 +228,15 @@ impl<'a> SSATransContext<'a> {
                 }
             }
 
-            // insert get expr at the start of block
-            let mut get_exprs = vec![];
-            for (to_get, from) in &cache.live_in_may_shadow {
-                let renamed = BlockSSATransContext::mangle_scheme(from, to_get.as_str(), 0);
+            // insert get exprs
+            let mut get_instrs = vec![];
+
+            for to_get in &cache.live_in_may_shadow {
+                let Some(renamed) = cache.renamed_live_in.get(to_get) else {
+                    continue;
+                };
                 let ty = cache.live_in_ty.get(to_get).unwrap();
-                get_exprs.push(
+                get_instrs.push(
                     serde_json::from_str(&format!(
                         r#"{{
                         "dest": "{renamed}",
@@ -218,94 +247,125 @@ impl<'a> SSATransContext<'a> {
                     .unwrap(),
                 );
             }
-            let first_non_label_idx = cfg_node_lock
+
+            let first_non_label_idx = node_lock
                 .blk
                 .instrs
                 .iter()
-                .position(|inst| {
-                    !matches!(inst, LabelOrInst::Label { .. })
-                    // handle the entry block may set case
-                })
+                .position(|inst| !matches!(inst, LabelOrInst::Label { .. }))
                 .unwrap_or(1); // otherwise, basic block only contains a single label
 
-            cfg_node_lock
+            node_lock
                 .blk
                 .instrs
-                .splice(first_non_label_idx..first_non_label_idx, get_exprs);
+                .splice(first_non_label_idx..first_non_label_idx, get_instrs);
 
-            let mut merged_renamed_live_out = cache.renamed_live_out.clone();
-
-            // updating naming for get variable
-            for original_to_get_name in cache.live_in_may_shadow.keys() {
-                // if the live in we get is not shadowed
-                if !merged_renamed_live_out.contains_key(original_to_get_name) {
-                    let from = cache.acc_live_in.get(original_to_get_name).unwrap();
-                    merged_renamed_live_out.insert(
-                        original_to_get_name.clone(),
-                        BlockSSATransContext::mangle_scheme(
-                            from,
-                            original_to_get_name.as_str(),
-                            0,
-                        ),
-                    );
-                }
-            }
-            non_ambiguious_var_renaming.extend(merged_renamed_live_out);
-
-            let mut set_instrs = vec![];
-            for succ in &cfg_node_lock.successors {
+            for succ in &node_lock.successors {
                 let succ_ptr = Weak::as_ptr(succ);
-                let succ_cache = per_blk_cache.get(&succ_ptr).unwrap();
-                for (to_set, from) in &succ_cache.live_in_may_shadow {
-                    let to_set_local_name = non_ambiguious_var_renaming.get(to_set).unwrap();
-                    let remote_name =
-                        BlockSSATransContext::mangle_scheme(from, to_set.as_str(), 0);
-                    set_instrs.push(
-                        serde_json::from_str(&format!(
-                            r#"{{
-                            "args" : ["{remote_name}", "{to_set_local_name}"],
-                            "op": "set"
-                        }}"#
-                        ))
-                        .unwrap(),
-                    )
+                let succ_cache = self.blk_cache.get(&succ_ptr).unwrap();
+                for to_set in &succ_cache.live_in_may_shadow {
+                    if !succ_cache.renamed_live_in.contains_key(to_set) {
+                        continue;
+                    }
+                    self.register_set_instrs(&mut registered_set_instrs, succ_ptr, to_set);
                 }
             }
+        }
+
+        for node in &self.cfg.nodes {
+            let node_ptr = Arc::as_ptr(node);
+            let mut node_lock = node.lock().unwrap();
             // insert set expr at the end of block before the last jmp/br inst if there is one
-            let last_jmp_or_br = cfg_node_lock.blk.instrs.iter().position(
+            let last_jmp_or_br = node_lock.blk.instrs.iter().position(
                 |inst| matches!(inst, LabelOrInst::Inst {op, ..} if (op == "br") || (op == "jmp")),
             );
-
+            let Some(set_instrs) = registered_set_instrs.remove(&node_ptr) else {
+                continue;
+            };
+            if set_instrs.is_empty() {
+                continue;
+            }
             if let Some(last_jmp_or_br) = last_jmp_or_br {
-                cfg_node_lock
+                node_lock
                     .blk
                     .instrs
                     .splice(last_jmp_or_br..last_jmp_or_br, set_instrs);
             } else {
-                cfg_node_lock.blk.instrs.extend(set_instrs);
-            }
-
-            for child_dom_node in &dom_node_lock.successors {
-                preorder_recurse_on_dom_node(
-                    &child_dom_node.upgrade().unwrap(),
-                    non_ambiguious_var_renaming.clone(),
-                    per_blk_cache,
-                );
+                node_lock.blk.instrs.extend(set_instrs);
             }
         }
+    }
 
-        let func_args: HashMap<_, _> =
-            self.func_ctx.args.as_ref().map_or(HashMap::new(), |args| {
-                args.iter()
-                    .map(|arg| (arg.name.clone(), arg.name.clone()))
-                    .collect()
-            });
+    /// register set expr at the remote blk when get expr is inserted at current blk
+    fn register_set_instrs(
+        &self,
+        blk_set_instrs: &mut HashMap<NodePtr, Vec<LabelOrInst>>,
+        cur_ptr: NodePtr,
+        name: &String,
+    ) {
+        let cache = self.blk_cache.get(&cur_ptr).unwrap();
+        let remote_list = cache.reach_def.get(name.as_str()).unwrap();
+        let to_set = cache.renamed_live_in.get(name.as_str()).unwrap();
+        assert!(remote_list.len() > 1);
+        for remote_ptr in remote_list {
+            let canonical_repr = self.canonical_repr_at_blk(*remote_ptr, name);
+            let set_instr = serde_json::from_str(&format!(
+                r#"{{
+                        "args" : ["{to_set}", "{canonical_repr}"],
+                        "op": "set"
+                    }}"#
+            ))
+            .unwrap();
 
-        preorder_recurse_on_dom_node(
-            &self.dom_tree.root.upgrade().unwrap(),
-            func_args,
-            &self.blk_cache,
-        );
+            blk_set_instrs
+                .entry(*remote_ptr)
+                .or_default()
+                .push(set_instr);
+        }
+    }
+
+    // fetch renaming of remote symbol
+    fn fetch_remote_name(&self, cur_ptr: NodePtr, name: &String) -> String {
+        let cache = self.blk_cache.get(&cur_ptr).unwrap();
+        let root_ptr = Weak::as_ptr(&self.cfg.root);
+
+        let func_args_name: HashSet<_> = self
+            .func_ctx
+            .args
+            .clone()
+            .unwrap_or_default()
+            .iter()
+            .map(|arg| arg.name.clone())
+            .collect();
+
+        if cur_ptr == root_ptr {
+            assert!(func_args_name.contains(name.as_str()));
+            // directly return arg name
+            return name.clone();
+        }
+        let remote_set = cache.reach_def.get(name).unwrap();
+        assert!(remote_set.len() == 1);
+        let remote_ptr = remote_set.iter().next().unwrap();
+        self.canonical_repr_at_blk(*remote_ptr, name)
+    }
+
+    fn canonical_repr_at_blk(&self, ptr: NodePtr, name: &String) -> String {
+        let func_args_name: HashSet<_> = self
+            .func_ctx
+            .args
+            .clone()
+            .unwrap_or_default()
+            .iter()
+            .map(|arg| arg.name.clone())
+            .collect();
+        let root_ptr = Weak::as_ptr(&self.cfg.root);
+        if let Some(canonical_repr) = self.blk_cache.get(&ptr).unwrap().renamed_live_out.get(name) {
+            canonical_repr.clone()
+        } else {
+            assert_eq!(ptr, root_ptr);
+            assert!(func_args_name.contains(name.as_str()));
+            name.clone()
+        }
     }
 }
 
@@ -427,37 +487,61 @@ impl WorkListAlgo for VarTypeAnalysis {
     }
 }
 
-pub struct LivenessAnalysisWithLabelBackProp;
+pub struct ReachDefWithLabelProp {
+    root_ptr: NodePtr,
+    args_ty: HashMap<String, String>,
+}
 
-impl WorkListAlgo for LivenessAnalysisWithLabelBackProp {
-    const FORWARD_PASS: bool = false;
-    type InFlowType = HashMap<String, String>;
-    type OutFlowType = HashMap<String, String>;
+impl WorkListAlgo for ReachDefWithLabelProp {
+    const FORWARD_PASS: bool = true;
+    type InFlowType = HashMap<String, HashSet<NodePtr>>;
+    type OutFlowType = HashMap<String, HashSet<NodePtr>>;
 
     fn merge(out_flows: Vec<Self::OutFlowType>) -> Self::InFlowType {
-        out_flows.into_iter().flatten().collect()
+        out_flows
+            .into_iter()
+            .reduce(|mut acc, next| {
+                for (var, from) in next {
+                    if let Some(cur_from) = acc.get_mut(&var) {
+                        cur_from.extend(from);
+                    } else {
+                        acc.insert(var.clone(), from);
+                    };
+                }
+                acc
+            })
+            .unwrap_or_default()
     }
 
     fn transfer(&mut self, node: &NodeRef, in_flow: Option<Self::InFlowType>) -> Self::OutFlowType {
+        let node_ptr = Arc::as_ptr(node);
+        let mut in_flow = if node_ptr == self.root_ptr {
+            self.args_ty
+                .keys()
+                .map(|arg| (arg.clone(), HashSet::from([node_ptr])))
+                .collect()
+        } else {
+            in_flow.unwrap_or_default()
+        };
+
         let node_lock = node.lock().unwrap();
         let blk = &node_lock.blk;
-        let label = blk
-            .label
-            .as_ref()
-            .map_or("entry", |s| s.as_str())
-            .to_string();
 
-        let (able_to_kill, used_but_not_defed) = (blk.defs(), blk.used_but_not_defed());
-        let used_but_not_defed: HashMap<_, _> = used_but_not_defed
+        let used_but_not_defed = blk.used_but_not_defed();
+
+        let able_to_kill: HashMap<_, _> = blk
+            .defs()
             .into_iter()
-            .map(|var| (var, label.clone()))
+            .map(|var| (var, HashSet::from([node_ptr])))
             .collect();
-        if let Some(mut in_flow) = in_flow {
-            in_flow.retain(|var, _| !able_to_kill.contains(var));
-            in_flow.extend(used_but_not_defed);
-            in_flow
-        } else {
-            used_but_not_defed
-        }
+
+        in_flow.iter_mut().for_each(|(var, from)| {
+            // only reset source if conflicting def is used within the block
+            if from.len() > 1 && used_but_not_defed.contains(var) {
+                *from = HashSet::from([node_ptr]);
+            }
+        });
+        in_flow.extend(able_to_kill);
+        in_flow
     }
 }
