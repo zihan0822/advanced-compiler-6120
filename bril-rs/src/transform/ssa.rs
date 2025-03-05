@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::default::Default;
 use std::sync::{Arc, Mutex, Weak};
 
-pub fn cfg_into_ssa(mut cfg: Cfg, func_ctx: FuncCtx) -> Cfg {
-    if let Some(dummy_entry_blk) = require_dummy_entry_blk(&cfg, &func_ctx) {
+pub fn cfg_into_ssa(mut cfg: Cfg) -> Cfg {
+    if let Some(dummy_entry_blk) = require_dummy_entry_blk(&cfg) {
         let old_root_cfg_node = Weak::clone(&cfg.root);
         let new_root_cfg_node = Arc::new(Mutex::new(CfgNode {
             label: None,
@@ -25,7 +25,7 @@ pub fn cfg_into_ssa(mut cfg: Cfg, func_ctx: FuncCtx) -> Cfg {
         cfg.nodes.insert(0, new_root_cfg_node);
     }
 
-    let mut ssa_ctx = SSATransContext::new(&cfg, &func_ctx);
+    let mut ssa_ctx = SSATransContext::new(&cfg);
     ssa_ctx.walk_cfg();
     cfg
 }
@@ -75,12 +75,12 @@ pub fn cfg_from_ssa(cfg: Cfg) -> Cfg {
     cfg
 }
 
-fn require_dummy_entry_blk(cfg: &Cfg, func_ctx: &FuncCtx) -> Option<BasicBlock> {
+fn require_dummy_entry_blk(cfg: &Cfg) -> Option<BasicBlock> {
     let root_node = cfg.root.upgrade().unwrap();
     let root_node_lock = root_node.lock().unwrap();
-    if root_node_lock.label.is_some() && func_ctx.args.is_some() {
+    if root_node_lock.label.is_some() && cfg.func_ctx.args.is_some() {
         let mut instrs = vec![];
-        for arg in func_ctx.args.as_ref().unwrap() {
+        for arg in cfg.func_ctx.args.as_ref().unwrap() {
             instrs.push(
                 serde_json::from_str(&format!(
                     r#"{{
@@ -105,7 +105,6 @@ fn require_dummy_entry_blk(cfg: &Cfg, func_ctx: &FuncCtx) -> Option<BasicBlock> 
 
 struct SSATransContext<'a> {
     cfg: &'a Cfg,
-    func_ctx: &'a FuncCtx,
     blk_cache: HashMap<NodePtr, PerBlockCache>,
 }
 
@@ -120,10 +119,9 @@ struct PerBlockCache {
 }
 
 impl<'a> SSATransContext<'a> {
-    fn new(cfg: &'a Cfg, func_ctx: &'a FuncCtx) -> Self {
+    fn new(cfg: &'a Cfg) -> Self {
         Self {
             cfg,
-            func_ctx,
             blk_cache: Default::default(),
         }
     }
@@ -136,11 +134,16 @@ impl<'a> SSATransContext<'a> {
     }
 
     fn update_reach_def_cache(&mut self) {
-        let func_args_and_ty = self.func_ctx.args.as_ref().map_or(HashMap::new(), |args| {
-            args.iter()
-                .map(|arg| (arg.name.clone(), arg.ty.clone()))
-                .collect()
-        });
+        let func_args_and_ty = self
+            .cfg
+            .func_ctx
+            .args
+            .as_ref()
+            .map_or(HashMap::new(), |args| {
+                args.iter()
+                    .map(|arg| (arg.name.clone(), arg.ty.clone()))
+                    .collect()
+            });
         let mut reach_def_ctx = ReachDefWithLabelProp {
             root_ptr: Weak::as_ptr(&self.cfg.root),
             args_ty: func_args_and_ty,
@@ -180,11 +183,16 @@ impl<'a> SSATransContext<'a> {
     }
 
     fn per_blk_var_renaming(&mut self) {
-        let func_args_and_ty = self.func_ctx.args.as_ref().map_or(HashMap::new(), |args| {
-            args.iter()
-                .map(|arg| (arg.name.clone(), arg.ty.clone()))
-                .collect()
-        });
+        let func_args_and_ty = self
+            .cfg
+            .func_ctx
+            .args
+            .as_ref()
+            .map_or(HashMap::new(), |args| {
+                args.iter()
+                    .map(|arg| (arg.name.clone(), arg.ty.clone()))
+                    .collect()
+            });
 
         let mut live_in_type_algo = VarTypeAnalysis {
             root_ptr: Weak::as_ptr(&self.cfg.root),
@@ -374,14 +382,8 @@ impl<'a> SSATransContext<'a> {
         let cache = self.blk_cache.get(&cur_ptr).unwrap();
         let root_ptr = Weak::as_ptr(&self.cfg.root);
 
-        let func_args_name: HashSet<_> = self
-            .func_ctx
-            .args
-            .clone()
-            .unwrap_or_default()
-            .iter()
-            .map(|arg| arg.name.clone())
-            .collect();
+        let func_args_name: HashSet<_> =
+            HashSet::from_iter(self.cfg.func_ctx.args_name().unwrap_or_default());
 
         if cur_ptr == root_ptr {
             assert!(func_args_name.contains(name.as_str()));
@@ -395,14 +397,9 @@ impl<'a> SSATransContext<'a> {
     }
 
     fn canonical_repr_at_blk(&self, ptr: NodePtr, name: &String) -> String {
-        let func_args_name: HashSet<_> = self
-            .func_ctx
-            .args
-            .clone()
-            .unwrap_or_default()
-            .iter()
-            .map(|arg| arg.name.clone())
-            .collect();
+        let func_args_name: HashSet<_> =
+            HashSet::from_iter(self.cfg.func_ctx.args_name().unwrap_or_default());
+
         let root_ptr = Weak::as_ptr(&self.cfg.root);
         if let Some(canonical_repr) = self.blk_cache.get(&ptr).unwrap().renamed_live_out.get(name) {
             canonical_repr.clone()

@@ -1,6 +1,6 @@
 pub mod dom;
 use crate::bril::{LabelOrInst, ValueLit};
-use crate::cfg::{Cfg, FuncCtx, NodePtr, NodeRef};
+use crate::cfg::{Cfg, NodePtr, NodeRef};
 use crate::optim::{self, dflow::WorkListAlgo};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
@@ -11,28 +11,22 @@ use std::sync::{Arc, Weak};
 ///     U {out[p]} but exclude those conflict variables
 /// transfer:
 ///       in[n] add const var, exclude non-const var
-struct GlobalConstPropAlgo<'a> {
+struct GlobalConstPropAlgo {
     root_ptr: NodePtr,
-    func_args: Option<Vec<&'a String>>,
+    func_args: Option<Vec<String>>,
 }
 
-impl<'a> GlobalConstPropAlgo<'a> {
-    fn new(cfg: &Cfg, func_ctx: &'a FuncCtx) -> Self {
+impl GlobalConstPropAlgo {
+    fn new(cfg: &Cfg) -> Self {
         Self {
             root_ptr: Weak::as_ptr(&cfg.root),
-            func_args: func_ctx
-                .args
-                .as_ref()
-                .map(|args| args.iter().map(|arg| &arg.name).collect()),
+            func_args: cfg.func_ctx.args_name(),
         }
     }
 }
 
-pub fn find_global_const_folding_ctx(
-    cfg: &Cfg,
-    func_ctx: &FuncCtx,
-) -> HashMap<NodePtr, HashMap<String, ValueLit>> {
-    let ret = GlobalConstPropAlgo::new(cfg, func_ctx).execute(cfg);
+pub fn find_global_const_folding_ctx(cfg: &Cfg) -> HashMap<NodePtr, HashMap<String, ValueLit>> {
+    let ret = GlobalConstPropAlgo::new(cfg).execute(cfg);
     let mut global_ctx = HashMap::new();
 
     for node in &cfg.nodes {
@@ -62,7 +56,7 @@ enum VarType {
     Const(ValueLit),
 }
 
-impl WorkListAlgo for GlobalConstPropAlgo<'_> {
+impl WorkListAlgo for GlobalConstPropAlgo {
     const FORWARD_PASS: bool = true;
     type InFlowType = HashMap<String, VarType>;
     type OutFlowType = HashMap<String, VarType>;
@@ -164,8 +158,8 @@ macro_rules! const_eval {
     }
 }
 
-pub fn uninitialized_var_detection(cfg: &Cfg, func_ctx: &FuncCtx) -> Result<(), String> {
-    let mut algo = UninitDetectAlgo::new(cfg, func_ctx);
+pub fn uninitialized_var_detection(cfg: &Cfg) -> Result<(), String> {
+    let mut algo = UninitDetectAlgo::new(cfg);
     algo.execute(cfg);
     let mut fault_msg = String::new();
     for node in &cfg.nodes {
@@ -208,19 +202,16 @@ pub fn uninitialized_var_detection(cfg: &Cfg, func_ctx: &FuncCtx) -> Result<(), 
 /// transfer:
 ///     kill variables defined in blk
 ///     add variables defined in upperstream
-struct UninitDetectAlgo<'a> {
+struct UninitDetectAlgo {
     root_ptr: NodePtr,
-    func_args: Option<Vec<&'a String>>,
+    func_args: Option<Vec<String>>,
     per_blk_uninit: HashMap<NodePtr, BTreeMap<usize, Vec<String>>>,
 }
 
-impl<'a> UninitDetectAlgo<'a> {
-    fn new(cfg: &'a Cfg, func_ctx: &'a FuncCtx) -> Self {
+impl UninitDetectAlgo {
+    fn new(cfg: &Cfg) -> Self {
         let root_ptr = Weak::as_ptr(&cfg.root);
-        let func_args = func_ctx
-            .args
-            .as_ref()
-            .map(|args_ty| args_ty.iter().map(|arg_ty| &arg_ty.name).collect());
+        let func_args = cfg.func_ctx.args_name();
         Self {
             root_ptr,
             func_args,
@@ -236,7 +227,7 @@ enum VarInitState {
     Init,
 }
 
-impl WorkListAlgo for UninitDetectAlgo<'_> {
+impl WorkListAlgo for UninitDetectAlgo {
     const FORWARD_PASS: bool = true;
     type InFlowType = HashMap<String, VarInitState>;
     type OutFlowType = HashMap<String, VarInitState>;

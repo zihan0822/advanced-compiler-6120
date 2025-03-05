@@ -1,4 +1,3 @@
-use crate::cfg::FuncCtx;
 use crate::cfg::{Cfg, NodePtr, NodeRef, ProgCfgs};
 use crate::graphviz_prelude::*;
 use crate::optim::dflow::WorkListAlgo;
@@ -11,11 +10,11 @@ pub type WeakDomNodeRef = Weak<Mutex<DomNode>>;
 
 pub fn draw_prog_with_dom_as_dot_string(prog: &ProgCfgs) -> String {
     let mut g = graph!(di id!("Prog"));
-    for (i, (func_ctx, cfg)) in prog.0.iter().enumerate() {
+    for (i, cfg) in prog.0.iter().enumerate() {
         let mut rng = rand::rng();
         // randomly choose one node to compute its frontier
         let frontier_target = cfg.nodes[1..].choose(&mut rng);
-        let func_graph = draw_cfg_with_dom(cfg, frontier_target, func_ctx);
+        let func_graph = draw_cfg_with_dom(cfg, frontier_target);
         if let Graph::DiGraph { stmts, .. } = func_graph {
             g.add_stmt(stmt!(Subgraph {
                 id: id!(format!("cluster_{i}")),
@@ -26,21 +25,17 @@ pub fn draw_prog_with_dom_as_dot_string(prog: &ProgCfgs) -> String {
     g.print(&mut PrinterContext::default())
 }
 
-pub fn draw_cfg_with_dom_as_dot_string(cfg: &Cfg, func_ctx: &FuncCtx) -> String {
+pub fn draw_cfg_with_dom_as_dot_string(cfg: &Cfg) -> String {
     let mut rng = rand::rng();
     // randomly choose one node to compute its frontier
     let frontier_target = cfg.nodes[1..].choose(&mut rng);
-    let g = draw_cfg_with_dom(cfg, frontier_target, func_ctx);
+    let g = draw_cfg_with_dom(cfg, frontier_target);
     g.print(&mut PrinterContext::default())
 }
 
-fn draw_cfg_with_dom(
-    cfg: &Cfg,
-    highlight_frontier_for: Option<&NodeRef>,
-    func_ctx: &FuncCtx,
-) -> Graph {
+fn draw_cfg_with_dom(cfg: &Cfg, highlight_frontier_for: Option<&NodeRef>) -> Graph {
     let dom_tree = DomTree::from_cfg(cfg);
-    let func_name = &func_ctx.name;
+    let func_name = &cfg.func_ctx.name;
     let (mut dot_nodes_map, dot_edges) =
         cfg.nodes_and_edges_in_dot(|i| format!("{func_name}_cfg_{i}"));
     let cfg_ptr2dom_node: HashMap<_, _> = dom_tree
@@ -77,7 +72,7 @@ fn draw_cfg_with_dom(
         }
     }
     let mut g = graph!(di id!(func_name));
-    let scope = format!(r#""@{}""#, &func_ctx.name);
+    let scope = format!(r#""@{}""#, &func_name);
     let mut g_stmts = vec![
         stmt!(attr!("label", scope)),
         stmt!(attr!("labelloc", "t")),
@@ -86,7 +81,7 @@ fn draw_cfg_with_dom(
         stmt!(attr!("fontcolor", "brown")),
     ];
     if let Graph::DiGraph { mut stmts, .. } =
-        dom_tree.port_as_dot_with_scope(|i| format!("{}_dom_{i}", &func_ctx.name))
+        dom_tree.port_as_dot_with_scope(|i| format!("{}_dom_{i}", &func_name))
     {
         stmts.extend(vec![
             stmt!(attr!("style", "solid")),

@@ -30,7 +30,7 @@ fn main() -> std::io::Result<()> {
 
     let bril_prog = bril::Prog::from_json(&buf).unwrap();
     let prog_cfgs = cfg::ProgCfgs::from_bril_prog(&bril_prog);
-    for (_, cfg) in &prog_cfgs.0 {
+    for cfg in &prog_cfgs.0 {
         check_dom_tree_impl(cfg);
     }
     let dot_string = draw_prog_with_dom_as_dot_string(&prog_cfgs);

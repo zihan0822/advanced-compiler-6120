@@ -31,22 +31,8 @@ fn main() -> std::io::Result<()> {
 fn apply_cfg_optim(bril_prog: Prog, with_global_ctx: bool) -> Prog {
     let cfgs = cfg::ProgCfgs::from_bril_prog(&bril_prog);
     let mut functions = vec![];
-    for (func_ctx, cfg) in cfgs.0.into_iter() {
-        let optimized_instrs = optim::dce(cfg, func_ctx.clone(), with_global_ctx)
-            .nodes
-            .iter()
-            .flat_map(|node| {
-                let node_lock = node.lock().unwrap();
-                node_lock.blk.instrs.clone().into_iter()
-            })
-            .collect();
-        let func = Function {
-            name: func_ctx.name,
-            args: func_ctx.args,
-            ty: func_ctx.ty,
-            instrs: optimized_instrs,
-        };
-        functions.push(func);
+    for cfg in cfgs.0 {
+        functions.push(optim::dce(cfg, with_global_ctx).into_bril_func());
     }
     Prog { functions }
 }

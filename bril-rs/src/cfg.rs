@@ -14,29 +14,40 @@ pub(crate) mod prelude {
 }
 
 /// maintains cfg for each function in input bril prog
-pub struct ProgCfgs(pub Vec<(FuncCtx, Cfg)>);
+pub struct ProgCfgs(pub Vec<Cfg>);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FuncCtx {
     pub name: String,
     pub args: Option<Vec<Arg>>,
     pub ty: Option<String>,
 }
 
+impl FuncCtx {
+    pub fn args_name(&self) -> Option<Vec<String>> {
+        self.args
+            .as_ref()
+            .map(|args| args.iter().map(|arg| arg.name.clone()).collect())
+    }
+
+    pub fn args_ty(&self) -> Option<Vec<String>> {
+        self.args
+            .as_ref()
+            .map(|args| args.iter().map(|arg| arg.ty.clone()).collect())
+    }
+
+    fn from_func(func: &Function) -> Self {
+        Self {
+            name: func.name.clone(),
+            args: func.args.clone(),
+            ty: func.ty.clone(),
+        }
+    }
+}
+
 impl ProgCfgs {
     pub fn from_bril_prog(prog: &Prog) -> Self {
-        let cfgs = prog
-            .functions
-            .iter()
-            .map(|f| {
-                let func_ctx = FuncCtx {
-                    name: f.name.clone(),
-                    args: f.args.clone(),
-                    ty: f.ty.clone(),
-                };
-                (func_ctx, Cfg::from_bril_func(f))
-            })
-            .collect();
+        let cfgs = prog.functions.iter().map(Cfg::from_bril_func).collect();
         Self(cfgs)
     }
 
@@ -50,7 +61,8 @@ impl ProgCfgs {
             .0
             .iter()
             .enumerate()
-            .map(|(i, (func_ctx, cfg))| {
+            .map(|(i, cfg)| {
+                let func_ctx = &cfg.func_ctx;
                 let scope = format!(r#""@{}""#, &func_ctx.name);
                 let mut stmts = vec![
                     stmt!(attr!("label", scope)),
@@ -87,6 +99,7 @@ impl ProgCfgs {
 pub struct Cfg {
     pub nodes: Vec<NodeRef>,
     pub root: WeakNodeRef,
+    pub func_ctx: FuncCtx,
 }
 
 #[derive(Debug)]
@@ -98,12 +111,35 @@ pub struct CfgNode {
 }
 
 impl Cfg {
-    #[inline]
-    pub fn from_bril_func(func: &Function) -> Self {
-        Self::from_basic_blks(&BasicBlock::build_from_func(func))
+    pub fn into_bril_func(self) -> Function {
+        let instrs = self
+            .nodes
+            .iter()
+            .flat_map(|node| {
+                let node_lock = node.lock().unwrap();
+                node_lock.blk.instrs.clone()
+            })
+            .collect();
+        Function {
+            name: self.func_ctx.name,
+            args: self.func_ctx.args,
+            ty: self.func_ctx.ty,
+            instrs,
+        }
     }
 
-    pub fn from_basic_blks(blks: &[BasicBlock]) -> Self {
+    #[inline]
+    pub fn from_bril_func(func: &Function) -> Self {
+        let (root, nodes) = Self::build_graph_from_blks(&BasicBlock::from_func(func));
+        let func_ctx = FuncCtx::from_func(func);
+        Self {
+            root,
+            nodes,
+            func_ctx,
+        }
+    }
+
+    fn build_graph_from_blks(blks: &[BasicBlock]) -> (WeakNodeRef, Vec<NodeRef>) {
         let nodes: Vec<_> = blks
             .iter()
             .map(|blk| {
@@ -171,7 +207,7 @@ impl Cfg {
             }
         }
         let root = Arc::downgrade(&nodes[0]);
-        Self { nodes, root }
+        (root, nodes)
     }
 
     pub fn port_as_dot_string(&self) -> String {
@@ -327,7 +363,7 @@ pub struct BasicBlock {
 }
 
 impl BasicBlock {
-    pub fn build_from_func(func: &Function) -> Vec<BasicBlock> {
+    pub fn from_func(func: &Function) -> Vec<BasicBlock> {
         let mut blks = vec![];
         let mut cur_blk = Self::new();
         for instr in &func.instrs {

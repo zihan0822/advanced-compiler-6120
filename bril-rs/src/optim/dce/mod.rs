@@ -4,7 +4,7 @@
 pub mod global;
 use crate::analyzer;
 use crate::bril::{LabelOrInst, ValueLit};
-use crate::cfg::{BasicBlock, Cfg, FuncCtx, NodePtr};
+use crate::cfg::{BasicBlock, Cfg, NodePtr};
 
 use std::collections::{HashMap, HashSet};
 use std::default::Default;
@@ -15,9 +15,9 @@ use std::sync::{
 
 static RENAME_COUNTER: AtomicUsize = AtomicUsize::new(7654);
 
-pub fn dce(cfg: Cfg, func_ctx: FuncCtx, global_const_folding: bool) -> Cfg {
+pub fn dce(cfg: Cfg, global_const_folding: bool) -> Cfg {
     let global_const_folding_ctx = if global_const_folding {
-        Some(analyzer::find_global_const_folding_ctx(&cfg, &func_ctx))
+        Some(analyzer::find_global_const_folding_ctx(&cfg))
     } else {
         None
     };

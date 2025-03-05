@@ -29,9 +29,9 @@ fn main() -> std::io::Result<()> {
 
     let bril_prog = bril::Prog::from_json(&buf).unwrap();
     let prog_cfgs = cfg::ProgCfgs::from_bril_prog(&bril_prog);
-    for (func_ctx, cfg) in &prog_cfgs.0 {
-        if let Err(msg) = analyzer::uninitialized_var_detection(cfg, func_ctx) {
-            println!("@{}", func_ctx.name);
+    for cfg in &prog_cfgs.0 {
+        if let Err(msg) = analyzer::uninitialized_var_detection(cfg) {
+            println!("@{}", cfg.func_ctx.name);
             println!("{}", msg);
         }
     }
