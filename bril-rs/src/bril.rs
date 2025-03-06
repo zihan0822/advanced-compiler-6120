@@ -31,14 +31,14 @@ pub struct Arg {
     pub ty: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(untagged)]
 pub enum ValueLit {
     Int(i32),
     Bool(bool),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, Eq, PartialEq)]
 #[serde(rename_all = "lowercase", untagged)]
 pub enum LabelOrInst {
     Inst {

@@ -1,7 +1,7 @@
 use crate::bril::LabelOrInst;
 use crate::cfg::prelude::*;
 use crate::optim::dflow::WorkListAlgo;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::default::Default;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -251,7 +251,7 @@ impl<'a> SSATransContext<'a> {
             }
         }
 
-        let mut registered_set_instrs: HashMap<NodePtr, Vec<LabelOrInst>> = HashMap::new();
+        let mut registered_set_instrs: HashMap<NodePtr, BTreeSet<LabelOrInst>> = HashMap::new();
 
         // second pass insert set/get instr
         for node in &self.cfg.nodes {
@@ -352,7 +352,7 @@ impl<'a> SSATransContext<'a> {
     /// register set expr at the remote blk when get expr is inserted at current blk
     fn register_set_instrs(
         &self,
-        blk_set_instrs: &mut HashMap<NodePtr, Vec<LabelOrInst>>,
+        blk_set_instrs: &mut HashMap<NodePtr, BTreeSet<LabelOrInst>>,
         cur_ptr: NodePtr,
         name: &String,
     ) {
@@ -373,7 +373,7 @@ impl<'a> SSATransContext<'a> {
             blk_set_instrs
                 .entry(*remote_ptr)
                 .or_default()
-                .push(set_instr);
+                .insert(set_instr);
         }
     }
 
