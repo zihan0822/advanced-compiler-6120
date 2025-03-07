@@ -1,0 +1,15 @@
+[envs.examples]
+command = '''
+    bril2json < {filename} |
+    python ../bril/examples/to_ssa.py | 
+    bril2txt > {filename}.ssa.baseline
+''' 
+output.out = "-"
+
+[envs.dom-free-ssa]
+command = '''
+    bril2json < {filename} | 
+    ../target/release/into-ssa | 
+    bril2txt > {filename}.ssa.dom-free
+'''
+output.out = "-"

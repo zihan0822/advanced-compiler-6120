@@ -1,0 +1,28 @@
+extract = 'total_dyn_inst: (\d+)'
+benchmarks = '../bril/benchmarks/core/*.bril'
+timeout = 30
+
+[runs.baseline]
+pipeline = ["bril2json", "python ../bril/examples/tdce.py tdce+", "brili -p {args}"]
+
+[runs.examples-roundtrip]
+pipeline = [
+    "bril2json",
+    "python ../bril/examples/tdce.py tdce+",
+    "python ../bril/examples/to_ssa.py",
+    "python ../bril/examples/tdce.py tdce+",
+    "python ../bril/examples/from_ssa.py",
+    "python ../bril/examples/tdce.py tdce+",
+    "brili -p {args}",
+]
+
+[runs.dom-free-roundtrip]
+pipeline = [
+    "bril2json",
+    "python ../bril/examples/tdce.py tdce+",
+    "../target/release/into-ssa",
+    "python ../bril/examples/tdce.py tdce+",
+    "../target/release/from-ssa",
+    "python ../bril/examples/tdce.py tdce+",
+    "brili -p {args}",
+]
