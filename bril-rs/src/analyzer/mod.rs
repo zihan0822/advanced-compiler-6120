@@ -1,4 +1,5 @@
 pub mod dom;
+pub mod scc;
 use crate::bril::{LabelOrInst, ValueLit};
 use crate::cfg::{Cfg, NodePtr, NodeRef};
 use crate::optim::{self, dflow::WorkListAlgo};
