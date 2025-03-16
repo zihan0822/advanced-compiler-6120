@@ -29,33 +29,36 @@ pub fn find_sccs(cfg: &Cfg) -> Vec<Component> {
     }
 
     impl Visitor {
-        fn preorder_pass(&mut self, cur: NodeRef, idx: usize) {
+        fn preorder_pass(&mut self, cur: NodeRef, idx: &mut usize) {
             let node_ptr = Arc::as_ptr(&cur);
             if self.vis.contains(&node_ptr) {
                 return;
             }
-            self.preorder.insert(node_ptr, idx);
-            self.lowest.insert(node_ptr, idx);
+            self.preorder.insert(node_ptr, *idx);
+            self.lowest.insert(node_ptr, *idx);
             self.vis.insert(node_ptr);
             for child in cur.lock().unwrap().successors.iter() {
-                self.preorder_pass(Weak::upgrade(child).unwrap(), idx + 1)
+                *idx += 1;
+                self.preorder_pass(Weak::upgrade(child).unwrap(), idx)
             }
         }
 
-        fn find_lowest_reachable(&mut self, cur: NodeRef) -> usize {
+        fn find_lowest_reachable(&mut self, cur: NodeRef) {
             let node_ptr = Arc::as_ptr(&cur);
             let cur_preorder = self.preorder.get(&node_ptr).copied().unwrap();
             let mut lowest = cur_preorder;
-            if self.vis.contains(&node_ptr) {
-                return lowest;
-            }
             self.vis.insert(node_ptr);
             self.stack.push(node_ptr);
+
             for child in cur.lock().unwrap().successors.iter() {
-                lowest = min(
-                    lowest,
-                    self.find_lowest_reachable(Weak::upgrade(child).unwrap()),
-                );
+                let child_ptr = Weak::as_ptr(child);
+                if self.stack.iter().any(|p| *p == child_ptr) {
+                    lowest = min(lowest, self.preorder.get(&child_ptr).copied().unwrap());
+                }
+                if !self.vis.contains(&child_ptr) {
+                    self.find_lowest_reachable(child.upgrade().unwrap());
+                    lowest = min(lowest, self.lowest.get(&child_ptr).copied().unwrap());
+                }
             }
             self.lowest.insert(node_ptr, lowest);
             if cur_preorder == lowest {
@@ -63,7 +66,6 @@ pub fn find_sccs(cfg: &Cfg) -> Vec<Component> {
                 let comp = self.stack.split_off(idx);
                 self.comps.push(comp);
             }
-            lowest
         }
 
         fn reset_vis(&mut self) {
@@ -72,7 +74,7 @@ pub fn find_sccs(cfg: &Cfg) -> Vec<Component> {
     }
     let mut visitor: Visitor = Default::default();
     let root_cfg_node = Weak::upgrade(&cfg.root).unwrap();
-    visitor.preorder_pass(root_cfg_node.clone(), 0);
+    visitor.preorder_pass(root_cfg_node.clone(), &mut 0);
     visitor.reset_vis();
     visitor.find_lowest_reachable(root_cfg_node.clone());
     let cfg_ptr2node: HashMap<_, _> = cfg
