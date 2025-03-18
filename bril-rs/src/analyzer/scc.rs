@@ -61,10 +61,7 @@ impl Component {
     }
 
     fn cfg_ptr_set(&self) -> HashSet<NodePtr> {
-        self.cfg_nodes
-            .iter()
-            .map(Arc::as_ptr)
-            .collect()
+        self.cfg_nodes.iter().map(Arc::as_ptr).collect()
     }
 }
 

@@ -261,6 +261,32 @@ impl DomTree {
 
         frontier
     }
+
+    pub fn is_dominator_of(&self, a: NodePtr, b: NodePtr) -> bool {
+        fn in_substree(dom_node: &DomNodeRef, query: NodePtr) -> bool {
+            let dom_node_lock = dom_node.lock().unwrap();
+            let cfg_ptr = Arc::as_ptr(&dom_node_lock.cfg_node);
+            if cfg_ptr == query {
+                return true;
+            }
+            for child in &dom_node_lock.successors {
+                if in_substree(&child.upgrade().unwrap(), query) {
+                    return true;
+                }
+            }
+            false
+        }
+        let starting_node = self
+            .nodes
+            .iter()
+            .find(|dom_node| {
+                let cfg_node = &dom_node.lock().unwrap().cfg_node;
+                Arc::as_ptr(cfg_node) == a
+            })
+            .cloned()
+            .unwrap();
+        in_substree(&starting_node, b)
+    }
 }
 
 pub struct DomNode {
