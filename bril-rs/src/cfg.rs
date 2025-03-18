@@ -46,6 +46,11 @@ impl FuncCtx {
 }
 
 impl ProgCfgs {
+    pub fn into_bril_prog(self) -> Prog {
+        let functions = self.0.into_iter().map(|cfg| cfg.into_bril_func()).collect();
+        Prog { functions }
+    }
+
     pub fn from_bril_prog(prog: &Prog) -> Self {
         let cfgs = prog.functions.iter().map(Cfg::from_bril_func).collect();
         Self(cfgs)
