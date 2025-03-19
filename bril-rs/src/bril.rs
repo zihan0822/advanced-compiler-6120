@@ -24,21 +24,21 @@ pub struct Function {
     pub instrs: Vec<LabelOrInst>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash)]
 pub struct Arg {
     pub name: String,
     #[serde(rename = "type")]
     pub ty: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
 pub enum ValueLit {
     Int(i32),
     Bool(bool),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialOrd, Ord, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase", untagged)]
 pub enum LabelOrInst {
     Inst {
