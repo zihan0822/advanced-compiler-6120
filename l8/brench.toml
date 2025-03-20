@@ -1,0 +1,21 @@
+extract = 'total_dyn_inst: (\d+)'
+benchmarks = '../bril/benchmarks/core/*.bril'
+timeout = 30
+
+[runs.baseline]
+pipeline = [
+    "bril2json",
+    "../target/release/l3 -g", # dce
+    "../target/release/into-ssa",
+    "../target/release/from-ssa",
+    "../target/release/l3 -g",
+    "brili -p {args}"]
+
+[runs.licm]
+pipeline = [
+    "bril2json",
+    "../target/release/l3 -g",  # dce
+    "../target/release/l8",     # lico
+    "../target/release/l3 -g",
+    "brili -p {args}",
+]
