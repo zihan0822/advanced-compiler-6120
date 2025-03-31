@@ -385,17 +385,18 @@ impl<'a> WorkListAlgo for LoopInvariantAnalysis<'a> {
     const FORWARD_PASS: bool = true;
     type InFlowType = HashSet<String>;
     type OutFlowType = HashSet<String>;
+    fn init_in_flow_state(&self, node: &NodeRef) -> Self::InFlowType {
+        if Arc::as_ptr(node) == Arc::as_ptr(&self.natural_loop.entry) {
+            self.reaching_def.clone()
+        } else {
+            Default::default()
+        }
+    }
     fn merge(out_flow: Vec<Self::OutFlowType>) -> Self::InFlowType {
         out_flow.into_iter().flatten().collect()
     }
-    fn transfer(&mut self, node: &NodeRef, in_flow: Option<Self::InFlowType>) -> Self::OutFlowType {
-        let mut out_flow = in_flow.unwrap_or_else(|| {
-            if Arc::as_ptr(node) == Arc::as_ptr(&self.natural_loop.entry) {
-                self.reaching_def.clone()
-            } else {
-                Default::default()
-            }
-        });
+    fn transfer(node: &NodeRef, in_flow: Self::InFlowType) -> Self::OutFlowType {
+        let mut out_flow = in_flow;
         for inst in &node.lock().unwrap().blk.instrs {
             if let LabelOrInst::Inst {
                 op,

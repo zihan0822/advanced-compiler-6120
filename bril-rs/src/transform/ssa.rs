@@ -492,13 +492,15 @@ impl WorkListAlgo for VarTypeAnalysis {
     type InFlowType = HashMap<String, String>;
     type OutFlowType = HashMap<String, String>;
 
-    fn transfer(&mut self, node: &NodeRef, in_flow: Option<Self::InFlowType>) -> Self::OutFlowType {
-        let node_ptr = Arc::as_ptr(node);
-        let mut in_flow = if node_ptr == self.root_ptr {
+    fn init_in_flow_state(&self, node: &NodeRef) -> Self::InFlowType {
+        if Arc::as_ptr(node) == self.root_ptr {
             self.args_ty.clone()
         } else {
-            in_flow.unwrap_or_default()
-        };
+            HashMap::new()
+        }
+    }
+
+    fn transfer(node: &NodeRef, mut in_flow: Self::InFlowType) -> Self::OutFlowType {
         for inst in &node.lock().unwrap().blk.instrs {
             if let LabelOrInst::Inst {
                 dest: Some(dest),
@@ -538,6 +540,17 @@ impl WorkListAlgo for ReachDefWithLabelProp {
     const FORWARD_PASS: bool = true;
     type InFlowType = HashMap<String, HashSet<NodePtr>>;
     type OutFlowType = HashMap<String, HashSet<NodePtr>>;
+    fn init_in_flow_state(&self, node: &NodeRef) -> Self::InFlowType {
+        let node_ptr = Arc::as_ptr(node);
+        if node_ptr == self.root_ptr {
+            self.args_ty
+                .keys()
+                .map(|arg| (arg.clone(), HashSet::from([node_ptr])))
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    }
 
     fn merge(out_flows: Vec<Self::OutFlowType>) -> Self::InFlowType {
         out_flows
@@ -555,17 +568,8 @@ impl WorkListAlgo for ReachDefWithLabelProp {
             .unwrap_or_default()
     }
 
-    fn transfer(&mut self, node: &NodeRef, in_flow: Option<Self::InFlowType>) -> Self::OutFlowType {
+    fn transfer(node: &NodeRef, mut in_flow: Self::InFlowType) -> Self::OutFlowType {
         let node_ptr = Arc::as_ptr(node);
-        let mut in_flow = if node_ptr == self.root_ptr {
-            self.args_ty
-                .keys()
-                .map(|arg| (arg.clone(), HashSet::from([node_ptr])))
-                .collect()
-        } else {
-            in_flow.unwrap_or_default()
-        };
-
         let node_lock = node.lock().unwrap();
         let blk = &node_lock.blk;
 

@@ -98,7 +98,7 @@ fn dce_on_blk_one_pass(
             .into_iter()
             .enumerate()
             .filter_map(|(idx, inst)| {
-                if to_be_deleted.iter().any(|&x| x == idx) {
+                if to_be_deleted.contains(&idx) {
                     None
                 } else {
                     Some(inst)

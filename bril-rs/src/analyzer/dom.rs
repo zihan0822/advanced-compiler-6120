@@ -313,16 +313,17 @@ impl WorkListAlgo for DomTreeConstCtx {
     type InFlowType = HashSet<NodePtr>;
     type OutFlowType = HashSet<NodePtr>;
 
-    fn transfer(&mut self, node: &NodeRef, in_flow: Option<Self::InFlowType>) -> Self::OutFlowType {
-        let node_ptr = Arc::as_ptr(node);
-        if node_ptr == self.root_ptr {
-            HashSet::from([self.root_ptr])
-        } else if let Some(mut in_flow) = in_flow {
-            in_flow.insert(node_ptr);
-            in_flow
+    fn init_in_flow_state(&self, node: &NodeRef) -> Self::InFlowType {
+        if Arc::as_ptr(node) == self.root_ptr {
+            HashSet::new()
         } else {
             self.all_nodes.iter().cloned().collect()
         }
+    }
+
+    fn transfer(node: &NodeRef, mut in_flow: Self::InFlowType) -> Self::OutFlowType {
+        in_flow.insert(Arc::as_ptr(node));
+        in_flow
     }
 
     fn merge(out_flow: Vec<Self::OutFlowType>) -> Self::InFlowType {
