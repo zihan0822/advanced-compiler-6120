@@ -137,10 +137,40 @@ impl Cfg {
     pub fn from_bril_func(func: &Function) -> Self {
         let (root, nodes) = Self::build_graph_from_blks(&BasicBlock::from_func(func));
         let func_ctx = FuncCtx::from_func(func);
-        Self {
+        let mut cfg = Self {
             root,
             nodes,
             func_ctx,
+        };
+        cfg.normalize();
+        cfg
+    }
+
+    /// maintain the invariant that the entry node does not have any predecessor
+    pub fn normalize(&mut self) {
+        let root_node = Weak::upgrade(&self.root).unwrap();
+        let mut root_node_lock = root_node.lock().unwrap();
+        if !root_node_lock.predecessors.is_empty() {
+            let dummy_label = "__dummy_entry_blk".to_string(); 
+            let blk = BasicBlock {
+                label: Some(dummy_label.clone()),
+                instrs: vec![
+                    serde_json::from_str(&format!(
+                        r#"{{
+                            "label": "{dummy_label}"
+                        }}"#
+                    )).unwrap()
+                ]
+            };
+            let dummy_cfg_node = Arc::new(Mutex::new(CfgNode {
+                label: Some(dummy_label),
+                blk,
+                predecessors: vec![],
+                successors: vec![Weak::clone(&self.root)]
+            }));
+            root_node_lock.predecessors.push(Arc::downgrade(&dummy_cfg_node));
+            self.root = Arc::downgrade(&dummy_cfg_node);
+            self.nodes.insert(0, dummy_cfg_node);
         }
     }
 
