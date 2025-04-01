@@ -12,27 +12,28 @@ use std::sync::{Arc, Weak};
 /// transfer:
 ///       in[n] add const var, exclude non-const var
 struct GlobalConstPropAlgo {
-    root_ptr: NodePtr,
+    root_ptr: usize,
     func_args: Option<Vec<String>>,
 }
 
 impl GlobalConstPropAlgo {
     fn new(cfg: &Cfg) -> Self {
         Self {
-            root_ptr: Weak::as_ptr(&cfg.root),
+            root_ptr: Weak::as_ptr(&cfg.root) as usize,
             func_args: cfg.func_ctx.args_name(),
         }
     }
 }
 
 pub fn find_global_const_folding_ctx(cfg: &Cfg) -> HashMap<NodePtr, HashMap<String, ValueLit>> {
-    let ret = GlobalConstPropAlgo::new(cfg).execute(cfg);
+    let ret = GlobalConstPropAlgo::new(cfg).para_execute(cfg, crate::NUM_WORKLIST_WORKER);
     let mut global_ctx = HashMap::new();
 
+    let ret_lock = ret.lock().unwrap();
     for node in &cfg.nodes {
         let node_ptr = Arc::as_ptr(node);
-        let reached_consts: HashMap<_, _> = ret
-            .get(&node_ptr)
+        let reached_consts: HashMap<_, _> = ret_lock
+            .get(&(node_ptr as usize))
             .unwrap()
             .clone()
             .into_iter()
@@ -62,7 +63,8 @@ impl WorkListAlgo for GlobalConstPropAlgo {
     type OutFlowType = HashMap<String, VarType>;
 
     fn init_in_flow_state(&self, node: &NodeRef) -> Self::InFlowType {
-        if Arc::as_ptr(node) == self.root_ptr {
+        let node_ptr = Arc::as_ptr(node) as usize;
+        if node_ptr == self.root_ptr {
             if let Some(ref args) = self.func_args {
                 args.iter()
                     .map(|arg| (String::clone(arg), VarType::NonConst))

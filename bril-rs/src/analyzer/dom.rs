@@ -121,8 +121,8 @@ pub struct DomTree {
 
 impl DomTree {
     pub fn from_cfg(cfg: &Cfg) -> Self {
-        let mut build_ctx = DomTreeConstCtx::new(cfg);
-        let ret = build_ctx.execute(cfg);
+        let build_ctx = DomTreeConstCtx::new(cfg);
+        let ret = build_ctx.para_execute(cfg, crate::NUM_WORKLIST_WORKER);
         let ptr2node: HashMap<_, _> = cfg
             .nodes
             .iter()
@@ -137,12 +137,15 @@ impl DomTree {
             root: Arc::downgrade(ptr2node.get(&Weak::as_ptr(&cfg.root)).unwrap()),
             nodes: ptr2node.values().cloned().collect(),
         };
-        for doms in ret.values() {
-            let mut doms: Vec<_> = doms.iter().collect();
-            doms.sort_by_key(|ptr| ret.get(ptr).unwrap().len());
+        let ret_lock = ret.lock().unwrap();
+        // let doms_per_node: Vec<_> = ret_lock.iter().map(|kv| kv.value().clone()).collect();
+        let doms_per_node: Vec<_> = ret_lock.values().cloned().collect();
+        for doms in doms_per_node {
+            let mut doms: Vec<_> = Vec::from_iter(doms);
+            doms.sort_by_key(|ptr| ret_lock.get(ptr).unwrap().len());
             let doms = doms
                 .iter()
-                .map(|ptr| Arc::downgrade(ptr2node.get(ptr).unwrap()))
+                .map(|ptr| Arc::downgrade(ptr2node.get(&(*ptr as *const _)).unwrap()))
                 .collect();
             dom_tree.construct_path(doms);
         }
@@ -304,25 +307,30 @@ impl DomNode {
 }
 
 struct DomTreeConstCtx {
-    root_ptr: NodePtr,
-    all_nodes: Vec<NodePtr>,
+    root_ptr: usize,
+    all_nodes: Vec<usize>,
 }
 
 impl WorkListAlgo for DomTreeConstCtx {
     const FORWARD_PASS: bool = true;
-    type InFlowType = HashSet<NodePtr>;
-    type OutFlowType = HashSet<NodePtr>;
+    type InFlowType = HashSet<usize>;
+    type OutFlowType = HashSet<usize>;
 
     fn init_in_flow_state(&self, node: &NodeRef) -> Self::InFlowType {
-        if Arc::as_ptr(node) == self.root_ptr {
+        let node_ptr = Arc::as_ptr(node) as usize;
+        if node_ptr == self.root_ptr {
             HashSet::new()
         } else {
             self.all_nodes.iter().cloned().collect()
         }
     }
 
+    fn montone_improve(cur: &Self::OutFlowType, next: &Self::OutFlowType) -> bool {
+        next.is_subset(cur)
+    }
+
     fn transfer(node: &NodeRef, mut in_flow: Self::InFlowType) -> Self::OutFlowType {
-        in_flow.insert(Arc::as_ptr(node));
+        in_flow.insert(Arc::as_ptr(node) as usize);
         in_flow
     }
 
@@ -336,8 +344,12 @@ impl WorkListAlgo for DomTreeConstCtx {
 
 impl DomTreeConstCtx {
     fn new(cfg: &Cfg) -> Self {
-        let root_ptr = Weak::as_ptr(&cfg.root);
-        let all_nodes = cfg.nodes.iter().map(Arc::as_ptr).collect();
+        let root_ptr = Weak::as_ptr(&cfg.root) as usize;
+        let all_nodes = cfg
+            .nodes
+            .iter()
+            .map(|node| Arc::as_ptr(node) as usize)
+            .collect();
         Self {
             root_ptr,
             all_nodes,

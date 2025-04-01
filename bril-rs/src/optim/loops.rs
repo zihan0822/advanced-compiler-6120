@@ -174,7 +174,7 @@ fn identify_loop_invariants(
     loop_live_in: &HashSet<String>,
 ) -> HashSet<String> {
     let loop_subcfg = natural_loop.isolate_subcfg();
-    let mut loop_invariant_algo_ctx = LoopInvariantAnalysis {
+    let loop_invariant_algo_ctx = LoopInvariantAnalysis {
         reaching_def: loop_live_in,
         natural_loop,
     };

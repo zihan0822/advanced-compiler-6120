@@ -144,7 +144,7 @@ impl<'a> SSATransContext<'a> {
                     .map(|arg| (arg.name.clone(), arg.ty.clone()))
                     .collect()
             });
-        let mut reach_def_ctx = ReachDefWithLabelProp {
+        let reach_def_ctx = ReachDefWithLabelProp {
             root_ptr: Weak::as_ptr(&self.cfg.root),
             args_ty: func_args_and_ty,
         };
@@ -194,7 +194,7 @@ impl<'a> SSATransContext<'a> {
                     .collect()
             });
 
-        let mut live_in_type_algo = VarTypeAnalysis {
+        let live_in_type_algo = VarTypeAnalysis {
             root_ptr: Weak::as_ptr(&self.cfg.root),
             args_ty: func_args_and_ty,
         };
