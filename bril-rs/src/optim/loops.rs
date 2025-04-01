@@ -178,7 +178,7 @@ fn identify_loop_invariants(
         reaching_def: loop_live_in,
         natural_loop,
     };
-    let ret = loop_invariant_algo_ctx.execute(&loop_subcfg.cfg);
+    let ret = loop_invariant_algo_ctx.para_execute(&loop_subcfg.cfg);
     let invariants = LoopInvariantAnalysis::merge(
         natural_loop
             .entry
@@ -186,7 +186,7 @@ fn identify_loop_invariants(
             .unwrap()
             .predecessors
             .iter()
-            .map(|pred| ret.get(&Weak::as_ptr(pred)).unwrap().clone())
+            .map(|pred| ret.get(&(Weak::as_ptr(pred) as usize)).unwrap().clone())
             .collect(),
     );
     loop_subcfg.restore_original_cfg();
@@ -391,6 +391,10 @@ impl<'a> WorkListAlgo for LoopInvariantAnalysis<'a> {
         } else {
             Default::default()
         }
+    }
+
+    fn montone_improve(cur: &Self::OutFlowType, other: &Self::OutFlowType) -> bool {
+        other.is_superset(cur)
     }
     fn merge(out_flow: Vec<Self::OutFlowType>) -> Self::InFlowType {
         out_flow.into_iter().flatten().collect()

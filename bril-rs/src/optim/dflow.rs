@@ -9,7 +9,7 @@
 //!         worklist += successors of b
 use crate::cfg::{Cfg, NodePtr, NodeRef};
 use dashmap::DashMap;
-use std::cmp::Eq;
+use std::cmp::{self, Eq, Ord, PartialEq, PartialOrd};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{atomic, Arc, Mutex};
 
@@ -89,7 +89,7 @@ pub trait WorkListAlgo {
         out_states
     }
 
-    fn para_execute(&self, cfg: &Cfg, num_worker: usize) -> DashMap<usize, Self::OutFlowType>
+    fn para_execute(&self, cfg: &Cfg) -> DashMap<usize, Self::OutFlowType>
     where
         Self: Sync,
         Self::InFlowType: Clone + Sync + Send,
@@ -99,21 +99,19 @@ pub trait WorkListAlgo {
         // cast node_ptr to usize, which impls Send + Sync
         let out_states: DashMap<usize, Self::OutFlowType> = DashMap::new();
         let should_exit: atomic::AtomicBool = atomic::AtomicBool::new(false);
+        #[derive(Debug)]
         enum WorkerState {
             Sleep,
             Working,
             Submitted,
             Idle,
         }
-        let worker_states = Mutex::new(
-            (0..num_worker)
-                .map(|_| WorkerState::Sleep)
-                .collect::<Vec<_>>(),
-        );
+        let num_slave = crate::get_num_worklist_worker();
+        let worker_states = Mutex::new((0..num_slave).map(|_| WorkerState::Sleep).collect::<Vec<_>>());
 
-        std::thread::scope(|s| {
+        crate::get_thread_pool().scope(|s| {
             // master rountine
-            s.spawn(|| loop {
+            s.spawn(|_| loop {
                 let mut slave_all_spin = true;
                 for slave_state in worker_states.lock().unwrap().iter() {
                     if !matches!(slave_state, WorkerState::Idle) {
@@ -122,19 +120,20 @@ pub trait WorkListAlgo {
                     }
                 }
                 if slave_all_spin {
-                    assert!(worklist.lock().unwrap().is_empty());
+                    let worklist_lock = worklist.lock().unwrap();
+                    assert!(worklist_lock.is_empty());
                     should_exit.store(true, atomic::Ordering::Relaxed);
                     break;
                 }
             });
 
-            for slave_id in 0..num_worker {
+            for slave_id in 0..num_slave {
                 let should_exit = &should_exit;
                 let worklist = &worklist;
                 let worker_states = &worker_states;
                 let out_states = &out_states;
 
-                s.spawn(move || loop {
+                s.spawn(move |_| loop {
                     let next_to_do = {
                         let mut worklist_lock = worklist.lock().unwrap();
                         if let Some(next_to_do) = worklist_lock.pop_front() {
@@ -190,5 +189,29 @@ pub trait WorkListAlgo {
             }
         });
         out_states
+    }
+}
+
+#[allow(dead_code)]
+struct WorkListItem(NodeRef);
+
+impl PartialEq for WorkListItem {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::as_ptr(&self.0) == Arc::as_ptr(&other.0)
+    }
+}
+impl Eq for WorkListItem {}
+
+impl PartialOrd for WorkListItem {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for WorkListItem {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        let num_suc_self = self.0.lock().unwrap().successors.len();
+        let num_suc_other = other.0.lock().unwrap().successors.len();
+        num_suc_self.cmp(&num_suc_other)
     }
 }

@@ -26,7 +26,7 @@ impl GlobalConstPropAlgo {
 }
 
 pub fn find_global_const_folding_ctx(cfg: &Cfg) -> HashMap<NodePtr, HashMap<String, ValueLit>> {
-    let ret = GlobalConstPropAlgo::new(cfg).para_execute(cfg, crate::NUM_WORKLIST_WORKER);
+    let ret = GlobalConstPropAlgo::new(cfg).para_execute(cfg);
     let mut global_ctx = HashMap::new();
 
     for node in &cfg.nodes {

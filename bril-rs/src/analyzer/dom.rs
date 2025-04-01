@@ -122,7 +122,7 @@ pub struct DomTree {
 impl DomTree {
     pub fn from_cfg(cfg: &Cfg) -> Self {
         let build_ctx = DomTreeConstCtx::new(cfg);
-        let ret = build_ctx.para_execute(cfg, crate::NUM_WORKLIST_WORKER);
+        let ret = build_ctx.para_execute(cfg);
         let ptr2node: HashMap<_, _> = cfg
             .nodes
             .iter()

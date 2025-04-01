@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 pub fn find_unused_variables_per_node(cfg: &Cfg) -> HashMap<NodePtr, HashSet<String>> {
-    let ret = LivenessAnalysis.para_execute(cfg, crate::NUM_WORKLIST_WORKER);
+    let ret = LivenessAnalysis.para_execute(cfg);
     let mut unused_var_per_node = HashMap::new();
     for node in &cfg.nodes {
         let in_flows: HashSet<String> = LivenessAnalysis::predecessors(node)
