@@ -8,6 +8,7 @@
 //!     if out[b] is updated:
 //!         worklist += successors of b
 use crate::cfg::{Cfg, NodePtr, NodeRef};
+use dashmap::DashMap;
 use std::cmp::Eq;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{atomic, Arc, Mutex};
@@ -88,11 +89,7 @@ pub trait WorkListAlgo {
         out_states
     }
 
-    fn para_execute(
-        &self,
-        cfg: &Cfg,
-        num_worker: usize,
-    ) -> Arc<Mutex<HashMap<usize, Self::OutFlowType>>>
+    fn para_execute(&self, cfg: &Cfg, num_worker: usize) -> DashMap<usize, Self::OutFlowType>
     where
         Self: Sync,
         Self::InFlowType: Clone + Sync + Send,
@@ -100,8 +97,7 @@ pub trait WorkListAlgo {
     {
         let worklist: Mutex<VecDeque<_>> = Mutex::new(cfg.nodes.iter().cloned().collect());
         // cast node_ptr to usize, which impls Send + Sync
-        let out_states: Arc<Mutex<HashMap<usize, Self::OutFlowType>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let out_states: DashMap<usize, Self::OutFlowType> = DashMap::new();
         let should_exit: atomic::AtomicBool = atomic::AtomicBool::new(false);
         enum WorkerState {
             Sleep,
@@ -158,10 +154,8 @@ pub trait WorkListAlgo {
                             .iter()
                             .filter_map(|item| {
                                 out_states
-                                    .lock()
-                                    .unwrap()
                                     .get(&(Arc::as_ptr(item) as usize))
-                                    .cloned()
+                                    .map(|pred| pred.clone())
                             })
                             .collect()
                     };
@@ -172,23 +166,26 @@ pub trait WorkListAlgo {
                         self.init_in_flow_state(&next_to_do)
                     };
                     let out_flow = Self::transfer(&next_to_do, in_flow);
-                    let mut out_states_lock = out_states.lock().unwrap();
-                    let updated = out_states_lock
-                        .get(&next_ptr)
-                        .is_none_or(|prev_state| !out_flow.eq(&prev_state));
-                    if updated {
-                        let successor = Self::successors(&next_to_do);
-                        worklist.lock().unwrap().extend(successor);
-                        worker_states.lock().unwrap()[slave_id] = WorkerState::Submitted;
-                        out_states_lock
-                            .entry(next_ptr)
-                            .and_modify(|cur| {
-                                if Self::montone_improve(cur, &out_flow) {
-                                    *cur = out_flow.clone()
-                                }
-                            })
-                            .or_insert(out_flow);
-                    }
+                    out_states
+                        .entry(next_ptr)
+                        .and_modify(|cur| {
+                            if !out_flow.eq(cur) && Self::montone_improve(cur, &out_flow) {
+                                *cur = out_flow.clone();
+                                worklist
+                                    .lock()
+                                    .unwrap()
+                                    .extend(Self::successors(&next_to_do));
+                                worker_states.lock().unwrap()[slave_id] = WorkerState::Submitted;
+                            }
+                        })
+                        .or_insert_with(|| {
+                            worklist
+                                .lock()
+                                .unwrap()
+                                .extend(Self::successors(&next_to_do));
+                            worker_states.lock().unwrap()[slave_id] = WorkerState::Submitted;
+                            out_flow
+                        });
                 });
             }
         });

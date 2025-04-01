@@ -137,12 +137,10 @@ impl DomTree {
             root: Arc::downgrade(ptr2node.get(&Weak::as_ptr(&cfg.root)).unwrap()),
             nodes: ptr2node.values().cloned().collect(),
         };
-        let ret_lock = ret.lock().unwrap();
-        // let doms_per_node: Vec<_> = ret_lock.iter().map(|kv| kv.value().clone()).collect();
-        let doms_per_node: Vec<_> = ret_lock.values().cloned().collect();
+        let doms_per_node: Vec<_> = ret.iter().map(|kv| kv.value().clone()).collect();
         for doms in doms_per_node {
             let mut doms: Vec<_> = Vec::from_iter(doms);
-            doms.sort_by_key(|ptr| ret_lock.get(ptr).unwrap().len());
+            doms.sort_by_key(|ptr| ret.get(ptr).unwrap().len());
             let doms = doms
                 .iter()
                 .map(|ptr| Arc::downgrade(ptr2node.get(&(*ptr as *const _)).unwrap()))

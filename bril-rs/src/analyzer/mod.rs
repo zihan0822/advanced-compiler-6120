@@ -29,10 +29,9 @@ pub fn find_global_const_folding_ctx(cfg: &Cfg) -> HashMap<NodePtr, HashMap<Stri
     let ret = GlobalConstPropAlgo::new(cfg).para_execute(cfg, crate::NUM_WORKLIST_WORKER);
     let mut global_ctx = HashMap::new();
 
-    let ret_lock = ret.lock().unwrap();
     for node in &cfg.nodes {
         let node_ptr = Arc::as_ptr(node);
-        let reached_consts: HashMap<_, _> = ret_lock
+        let reached_consts: HashMap<_, _> = ret
             .get(&(node_ptr as usize))
             .unwrap()
             .clone()
