@@ -1,6 +1,7 @@
 use crate::cfg::{Cfg, NodePtr, NodeRef, ProgCfgs};
 use crate::graphviz_prelude::*;
 use crate::optim::dflow::WorkListAlgo;
+use crate::optim::para_dflow::ParaWorkListExt;
 use rand::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, Weak};

@@ -1,5 +1,6 @@
 use crate::cfg::{Cfg, NodePtr, NodeRef};
 use crate::optim::dflow::WorkListAlgo;
+use crate::optim::para_dflow::ParaWorkListExt;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 

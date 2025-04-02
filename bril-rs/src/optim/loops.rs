@@ -4,6 +4,7 @@ use crate::cfg::prelude::*;
 use crate::cfg::FuncCtx;
 use crate::optim::dce::global::ReachingDefAnalysis;
 use crate::optim::dflow::WorkListAlgo;
+use crate::optim::para_dflow::ParaWorkListExt;
 use crate::transform;
 
 use std::collections::{HashMap, HashSet};

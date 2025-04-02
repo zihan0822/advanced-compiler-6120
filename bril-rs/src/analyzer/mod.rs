@@ -3,6 +3,7 @@ pub mod scc;
 use crate::bril::{LabelOrInst, ValueLit};
 use crate::cfg::{Cfg, NodePtr, NodeRef};
 use crate::optim::dflow::WorkListAlgo;
+use crate::optim::para_dflow::ParaWorkListExt;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
