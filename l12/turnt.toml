@@ -1,0 +1,4 @@
+[envs.baseline]
+command = "bril2json < {filename} | brili -p {args}"
+output.out = "-"
+output.prof = "2"
